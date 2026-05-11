@@ -107,7 +107,7 @@ Mirrors `architecture/test-strategy.md` §3 M4 exactly. M0 + M1 + M2 + M3 gates 
 - [ ] `tests/integration/lifecycle-emails.spec.ts` green — E1 on signup-confirmed; E2 on Surface FAIL; E3 on PASS WITH FIXES; E4 on T-3 re-audit-window expiry; E5 on day-60-inactive-after-FAIL.
 - [ ] `tests/integration/can-spam-casl-pecr.spec.ts` green — unsubscribe link; one-click unsub honored within 10 days; identification line present.
 - [ ] **WCAG 2.2 AA third-party conformance audit passed** — third-party report at `compliance/wcag-conformance-<vendor>-2026.pdf`; `/accessibility` statement live.
-- [ ] `tests/a11y/at-recordings-fail-flow.test.md` — NVDA + VoiceOver recordings of FAIL-verdict primary flow stored in `tests/a11y/at-recordings/m4/`; manual sign-off by Halo.
+- [ ] `tests/a11y/at-recordings/m4/signoff.md` exists in HEAD with structured frontmatter (F-MAJ-3 closure) — `signed_by: halo`, `nvda_recording: tests/a11y/at-recordings/m4/nvda-fail-flow.webm` (file-existence assertion), `voiceover_recording: tests/a11y/at-recordings/m4/voiceover-fail-flow.webm` (file-existence assertion), `signed_at: <ISO-8601>`. Manual Halo review captured in the frontmatter `notes` field. CI asserts: frontmatter parses, all 4 fields non-null, both recording files exist + non-empty.
 - [ ] `tests/integration/status-page.spec.ts` green — uptime probe from two regions every 60s; `/healthz` returns 200; 99.5% SLI computable.
 - [ ] `tests/acceptance/gdpr-right-to-delete.spec.ts` green — request → 30-day clock → all tenant rows deleted; cryptoshredding key purged; audit log retained.
 - [ ] `tests/integration/retention-purge.spec.ts` green — pg_cron daily; expired rows deleted.

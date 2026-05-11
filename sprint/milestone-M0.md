@@ -22,7 +22,9 @@ Land the contracts, fixtures, RLS scaffold, and IaC that every later milestone c
   - `architecture/database/tables.sql`, `rls-policies.sql`, `runner-jwt.md`, `migration-order.md`
   - `architecture/threat-model.md` v1.0
   - `architecture/test-strategy.md` v1.0
-  - `architecture/schemas/` — all five schema files (audit-output, audit-event, audit-input, score_engine, score_engine.fixtures)
+  - `architecture/schemas/` — 4 schema files committed in HEAD at Phase 5 close (`audit-output.v1.schema.json`, `audit-event.v1.ts`, `score_engine.v1.json`, `score_engine.v1.fixtures.json`). **Not yet in HEAD (M0 deliverables, not prerequisites — F-MIN-1 closure):** `audit-input.v1.schema.json` (Atlas to author week 1) and `score_engine.v1.md` runbook (Atlas to author week 1).
+
+> **Realism note (F-MAJ-4 closure):** the 2-week M0 budget assumes **parallel execution from day 1** across Atlas (Phase-5 reconciliation B1/B2/B3 + new audit-input schema), Axiom (C2/C4 doc fixes), Shield (C-numbering + corpora), and Cipher (Fix-1/3a/3d/4) per R11 mitigation. Sequential execution does NOT fit the budget. Sprint allocates: week 1 = reconciliation in parallel + week-1 Jury re-audit checkpoint; week 2 = remaining M0 deliverables + final exit-gate run.
 
 ## Deliverables per layer
 
