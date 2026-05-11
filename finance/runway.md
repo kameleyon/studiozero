@@ -2,11 +2,16 @@
 
 **Phase:** 7 — Pricing & Unit Economics
 **Owner:** Meter (FinOps) — peer-coordinated with Penny (pricing), Sprint (milestone calendar)
-**Version:** 0.1
+**Version:** 0.2
 **Date:** 2026-05-11
-**Status:** First draft for Phase-7 exit gate per `BUILD_FLOW.md` (runway sustains Sprint's M0–M5 calendar).
+**Status:** v0.2 — Jo's three open inputs resolved on 2026-05-11. Recomputed at $25k starting capital with $0 cash compensation and pentest-net-60 locked.
 
-> **Method.** Builds monthly burn from cost-surface activation calendar (`finance/unit-economics.md` §1 + `sprint/milestone-M0..M5.md`). Projects MRR ramp from PRD §15 (25 customers in 60 days) under three scenarios. Flags cash-injection trigger points. Cross-checks Sprint's M0–M5 placeholder 16-week calendar (PRD §16) — `BUILD_FLOW.md` Phase 7 exit gate.
+> **What changed v0.1 → v0.2.** Three Phase-7 open dependencies now resolved (Jo, 2026-05-11):
+> 1. **Starting capital = $25,000 LOCKED** (was `EST` $50,000). Lean bootstrap, not the planning baseline.
+> 2. **Founder cash compensation = $0 LOCKED** (matches v0.1 assumption — no recompute).
+> 3. **Pentest payment terms = 30/60-day-net to be negotiated at M0 close** — `runway.md` models the 60-day-net case as the planning baseline (Meter's prior recommendation per v0.1 §4 trigger); 30-day-net modeled as the fallback. Net-0 (cash on receipt) breaches at M5 entry and is treated as FATAL.
+>
+> Every scenario recomputed. New crunch points surfaced. New risk **R20 (cash-runway crunch at M3→M5)** added for Sprint inheritance.
 
 ---
 
@@ -14,16 +19,20 @@
 
 Every line cites: `finance/unit-economics.md` §0 (vendor pricing), `sprint/milestone-M*.md` (activation week), `PRD.md §16` (16-week placeholder calendar), or `EST` with explicit assumption.
 
-`EST` assumptions baseline:
-- Calendar starts week 1 = today (2026-05-11) per Sprint M0 entry. M5 launch = week 16 ≈ 2026-08-31.
-- Jo compensation = $0 cash outflow (founder equity-only, working from existing capital). Flag explicitly — if Jo must draw cash compensation, recompute.
-- Pre-existing capital = `EST` $50,000 starting balance. **If Jo's actual balance differs, scale the scenarios proportionally — runway months invariant ratio holds.** Document Jo's actual cash position before relying on month-X verdicts.
+LOCKED inputs (Jo, 2026-05-11):
+- **Starting capital = $25,000.** Lean bootstrap. No `EST` qualifier — this is the number all scenarios run against.
+- **Jo cash compensation = $0/mo** through M5. Founder equity-only. If Jo must draw at any point pre-launch, every scenario in §3 fails — see §4 cut-burn triggers.
+- **Pentest terms = negotiate 30/60-day net at M0 close.** Industry-standard for Trail of Bits / Doyensec / NCC / Bishop Fox / Latacora early-stage engagements. Net-60 is the planning target; net-30 is the fallback; net-0 is unsurvivable.
+
+Other carryover from v0.1:
+- Calendar starts week 1 = 2026-05-11 per Sprint M0 entry. M5 launch = week 16 ≈ 2026-08-31.
+- WCAG audit terms NOT YET NEGOTIATED — see §4/§5. Meter recommends Halo + Comply request 30-day net at M1 close.
 
 ---
 
 ## 1. Burn baseline (M0–M4, pre-launch)
 
-Fixed monthly infra burn (per unit-economics.md §1):
+Fixed monthly infra burn (per `unit-economics.md` §1) — unchanged from v0.1:
 
 | Line | $/mo | Activates | Source |
 |---|---|---|---|
@@ -44,166 +53,223 @@ One-time pre-launch cost events:
 |---|---|---|---|
 | Legal (incorporation + ToS/Privacy/AUP + DPA template review) | $5,500 | Pre-M0 (week 0) | unit-economics §0 |
 | Comply trademark search + DMCA registration + attorney retainer | $2,000 | Phase 4 (pre-M0) | unit-economics §0 |
-| External pentest vendor (Trail of Bits / Doyensec / NCC / Bishop Fox / Latacora) | $22,500 `EST` | M3 wk 11 | unit-economics §0 + threat-model §5.3 |
-| WCAG 2.2 AA third-party conformance audit | $10,000 `EST` | M4 wk 14 | unit-economics §0 + PRD §14.6 |
+| External pentest vendor (Trail of Bits / Doyensec / NCC / Bishop Fox / Latacora) | $22,500 `EST` | engaged M0 wk 2; **invoiced M3 wk 11**; **cash lands wk 19 under net-60 (planning baseline)** | unit-economics §0 + `architecture/threat-model.md` §5.3 |
+| WCAG 2.2 AA third-party conformance audit | $10,000 `EST` | engaged M1 close (wk 6); **invoiced M4 wk 14**; **cash lands wk 14 under net-0 (current default)** — Meter recommends Halo+Comply renegotiate to net-30 | unit-economics §0 + PRD §14.6 |
 
-**Pre-launch cumulative cash burn (week 1 → week 16, M5 launch):**
+**Pre-launch cumulative cash outflow at $25k starting capital (week 1 → M5 launch wk 16), pentest-net-60 + WCAG-net-0 (current default):**
 
-| Block | Months | Fixed burn | One-time events | Cumulative outflow |
+| Block | Months | Fixed burn | One-time events cash-out | Cumulative cash position |
 |---|---|---|---|---|
-| Pre-M0 (week 0) | 0 | $0 | $5,500 legal + $2,000 comply = $7,500 | $7,500 |
-| M0–M2 (wk 1–9, ≈2.1 months) | 2.1 | 2.1 × $161 = $338 | $0 | $7,838 |
-| M3 (wk 10–11, ≈0.5 months) | 0.5 | 0.5 × $161 = $81 | $22,500 pentest | $30,419 |
-| M4 (wk 12–14, ≈0.7 months) | 0.7 | 0.7 × $161 = $113 | $10,000 WCAG | $40,532 |
-| M5 prep (wk 15–16, ≈0.5 months) | 0.5 | 0.5 × $161 = $81 | $0 | **$40,613 pre-launch outflow** |
+| Starting capital | | | | **$25,000** |
+| Pre-M0 (week 0) | 0 | $0 | $5,500 legal + $2,000 comply = $7,500 | $17,500 |
+| M0–M2 (wk 1–9, ≈2.1 months) | 2.1 | 2.1 × $161 = $338 | $0 (pentest invoiced wk 11 — not yet cash-out; WCAG engaged wk 6 — not yet cash-out) | $17,162 |
+| M3 (wk 10–11, ≈0.5 months) | 0.5 | 0.5 × $161 = $81 | $0 (pentest invoice received wk 11 but net-60 means cash hits ~wk 19) | $17,081 |
+| M4 (wk 12–14, ≈0.7 months) | 0.7 | 0.7 × $161 = $113 | $10,000 WCAG **(net-0 = upfront on invoice receipt)** | $6,968 |
+| M5 prep (wk 15–16, ≈0.5 months) | 0.5 | 0.5 × $161 = $81 | $0 | **$6,887 at M5 launch (Day 0)** |
 
-**Pre-launch cash outflow at M5 = ~$40,600** of `EST` $50,000 starting capital. Remaining cushion = ~$9,400 at launch. **This is tight.** See §3 scenarios.
+**Day-0 cash position at M5 launch = $6,887.** Pentest invoice (net-60) still outstanding — cash drain hits wk 19 (3 weeks post-launch), at which point MRR must absorb it or cushion goes underwater. See §3 / §5.
 
 ---
 
 ## 2. Launch ramp (M5+, weeks 17–...)
 
-PRD §15 target: 25 paying customers in first 60 days post-launch (week 17 through week 24).
-
-**Tier mix assumption (`EST`, anchored to Penny's positioning + persona §5):**
+Unchanged from v0.1 — ramp assumptions don't depend on starting capital. Reproduced for cross-reference:
 
 | Tier | Share of 25 | Count by day-60 | MRR contribution |
 |---|---|---|---|
-| Free | (not paying — `EST` 250 free signups for funnel; 25 paid = 10% attach, more aggressive than PRD §15's 20%-by-30d because mix-weighted) | 0 | $0 |
+| Free | (`EST` 250 free signups; 25 paid = 10% attach) | 0 | $0 |
 | BYOK Starter ($29) | 32% | 8 | $232 |
 | BYOK Pro ($79) | 12% | 3 | $237 |
 | Managed Starter ($99) | 24% | 6 | $594 |
 | Managed Pro ($249) | 12% | 3 | $747 |
 | CLI ($19) | 20% | 5 | $95 |
-| **Total day-60 paying** | 100% | **25** | **$1,905/mo MRR** |
+| **Day-60 total** | 100% | **25** | **$1,905/mo MRR** |
 
-Ramp curve `EST`:
-- Day 0 (M5 launch): 0 paying
-- Day 30: 12 paying (~half) → MRR `EST` $914/mo
-- Day 60: 25 paying → MRR $1,905/mo
-- Day 90 (M5 +30d, end of PRD §15 +90d window): assume 35 paying with attach compounding → MRR `EST` $2,667/mo
-- Month 6 post-launch (week 16+24 ≈ week 40): assume 60 paying with channel compounding → MRR `EST` $4,572/mo
-- Month 12 post-launch (V1.5 launch ≈ wk 16+6 → V2 launch ≈ wk 16+12; V1.5 Auto-PR attach starts): assume 120 paying + Auto-PR revenue → MRR `EST` $9,144/mo + Auto-PR `EST` $588/mo (12 bundles/mo × $49) = $9,732/mo
+Baseline ramp curve:
+- Day 0 (wk 16): 0 paying, $0 MRR.
+- Day 15 (wk 18): `EST` 6 paying, ~$457 MRR.
+- Day 30 (wk 20): `EST` 12 paying, ~$914 MRR.
+- Day 45 (wk 22): `EST` 18 paying, ~$1,371 MRR.
+- Day 60 (wk 24): 25 paying, $1,905 MRR (PRD §15 target).
+- Day 90 (wk 28): `EST` 35 paying, $2,667 MRR.
 
-**Monthly COGS ramp (per unit-economics.md §3 per-tier numbers):**
+**Cumulative MRR collected wks 17–19 (pentest cash-drain window, baseline scenario):**
+Approx weekly MRR collection (subscriptions billed monthly, first-charge timing distributed across days) ≈ $300–$900 collected by wk 19 cumulative — call it `EST` **$700** in cash inflow before pentest invoice cash-out hits.
 
-| Tier | Day-60 count | COGS/customer/mo | COGS/mo |
-|---|---|---|---|
-| Free | 250 signups (250 free funnel) | $0.90 (4 audits × $0.225) but decays — `EST` $0.45 mo-average | $113 |
-| BYOK Starter | 8 | $1.19 | $9.52 |
-| BYOK Pro | 3 | $2.75 | $8.25 |
-| Managed Starter | 6 | $6.25 (at cap-respected modeled rate per unit-economics §6) | $37.50 |
-| Managed Pro | 3 | $18.20 | $54.60 |
-| CLI | 5 | $0.85 | $4.25 |
-| **Day-60 total COGS** | | | **$227/mo** |
-
-**Day-60 contribution margin** = MRR − COGS = $1,905 − $227 = **$1,678/mo positive contribution**. **Above fixed burn $161/mo by $1,517.** Profitable contribution at day 60 in baseline.
-
-**Burn-to-MRR crossover** (the month MRR first exceeds total monthly outflow including fixed burn):
-- Total monthly outflow (fixed burn + COGS at day 60) = $161 + $227 = $388/mo
-- Day-60 MRR $1,905 ≫ $388 outflow → **crossover happens before day 60 in baseline scenario** — specifically at the point where MRR > $388 + COGS. At ~5 customers (mix-weighted MRR ~$381/mo) the line crosses. **`EST` crossover at day 15–20 post-launch** in baseline.
+Day-60 contribution margin unchanged: MRR $1,905 − COGS $227 − fixed $161 = **+$1,517/mo**.
 
 ---
 
-## 3. Runway scenarios
+## 3. Runway scenarios at $25k LOCKED
 
-Three scenarios × runway-remaining at end of year-1 (calendar week ~68, ≈2027-08).
+Day-0 (M5 launch) cash = **$6,887**. Pentest invoice $22,500 outstanding (net-60, cash-out wk 19). All three scenarios computed **WITH net-60 pentest baseline**. Net-30 fallback called out where it diverges.
 
-Starting capital `EST` $50,000. Pre-launch outflow $40,613. Cushion at M5 launch = **$9,387**.
+### 3.1 Pessimistic (10 paying customers by day 60)
 
-### 3.1 Pessimistic (10 paying customers by day 60, slow channel performance)
+Day-60 MRR `EST` $762/mo (mix-weighted, half of baseline). COGS `EST` $204/mo (incl. $113 free-funnel). Day-60 monthly net = $762 − $161 fixed − $204 COGS = **+$397/mo**.
 
-Tier mix-weighted MRR at day 60 with 10 paying = `EST` $762/mo.
-- Day-60 COGS `EST` $91/mo + $113 free-funnel COGS = $204/mo
-- Day-60 monthly net = $762 − $161 fixed − $204 COGS = **+$397/mo contribution** (still positive at day 60).
-- Crossover: ~day 30 (MRR > $355).
-- Cushion drain weeks 17–22 (slow ramp before crossover): `EST` extra $1,500 burn beyond crossover line.
-- **Cushion at crossover ≈ $7,900.** Survivable.
-- 6-month-post-launch MRR `EST` $1,524 (60 customers half-pace); year-1 MRR `EST` $3,500.
-- **Cumulative net from M5 → year-1 end ≈ +$24,000.**
-- **Year-1 ending cash `EST` = $9,400 + $24,000 = $33,400.** Runway-remaining = 33,400 / (avg monthly outflow `EST` $500) = **66+ months of runway**, assuming no cash compensation drawn.
-- **Even pessimistic survives** because pre-launch burn is the bottleneck, not post-launch unit economics.
+**Cash trajectory:**
+- Day 0 (wk 16): $6,887.
+- Wk 17–19 (pre-pentest-cashout): fixed burn 3 × $40 = $120; COGS ramps `EST` $30; first MRR inflow `EST` $300. Net wk 19 entry: **$7,037**.
+- Wk 19 pentest cash-out: $7,037 − $22,500 = **−$15,463** (under).
+- **Pessimistic FAILS under net-60 pentest.** Bridge financing required: needs ≥ $16k injection between wk 17 and wk 19.
+- Under **net-90** (if vendor accepts): cash-out wk 23. By wk 23, cumulative MRR inflow `EST` $1,200, fixed+COGS outflow `EST` $1,000. Wk 23 entry `EST` $7,087 → after pentest: **−$15,413.** Still fails.
+- **Verdict: NOT SURVIVABLE at $25k without bridge capital OR cost cut.** Trigger §4 actions.
 
 ### 3.2 Baseline (25 paying customers by day 60, PRD §15)
 
-As §2 above. Day-60 net +$1,517/mo. Year-1 MRR `EST` $9,732/mo with V1.5 Auto-PR. Year-1 ending cash `EST` $9,400 + cumulative-year-1-net `EST` $70,000 = **~$79,000**. Runway-remaining months: undefined-positive (cash growing).
+Day-60 MRR $1,905; day-60 monthly net **+$1,517/mo**.
 
-### 3.3 Optimistic (50 paying customers by day 60, Scout's positioning bet realized)
+**Cash trajectory:**
+- Day 0 (wk 16): $6,887.
+- Wk 17–19: fixed burn $120; COGS `EST` $60; first-charge MRR `EST` $700–$900 cash collected. Wk 19 entry `EST` **$7,400**.
+- Wk 19 pentest cash-out: $7,400 − $22,500 = **−$15,100** (under).
+- **Baseline ALSO FAILS under net-60 pentest** because the pentest invoice ($22.5k) is 3× the entire Day-0 cushion plus the first 3 weeks of MRR.
+- For baseline to survive net-60: need to push pentest to **net-90 AND** add MRR-acceleration (Managed alpha at M2 — see §5). Wk 22 (net-90) cash entry under accelerated ramp `EST` $13,000 → after pentest: **−$9,500.** Still fails.
+- **Path to survive baseline:** combine (a) pentest installments OR (b) M2 Managed alpha pulling MRR 7 weeks forward OR (c) bridge $15k friends-family at M3 entry.
 
-Mix-weighted MRR at day 60 = `EST` $3,810/mo. Day-60 net = $3,810 − $161 − $454 COGS = **+$3,195/mo**. Year-1 MRR `EST` $18,000/mo. Year-1 ending cash `EST` $9,400 + `EST` $130,000 = **~$139,000.**
+### 3.3 Optimistic (50 paying customers by day 60)
 
-**Crossover month (week-from-M5-launch) by scenario:**
+Day-60 MRR `EST` $3,810/mo; day-60 monthly net **+$3,195/mo**. Faster ramp.
 
-| Scenario | Crossover | Year-1 ending cash `EST` | Runway-remaining at year-1 end |
+**Cash trajectory:**
+- Day 0 (wk 16): $6,887.
+- Wk 17–19: fixed burn $120; COGS `EST` $100; first-charge MRR `EST` $1,800 cash collected (faster pre-launch waitlist conversion). Wk 19 entry `EST` **$8,467**.
+- Wk 19 pentest cash-out: $8,467 − $22,500 = **−$14,033** (under).
+- **Optimistic ALSO FAILS under net-60 pentest** in cash terms. The pentest invoice is structural — not a ramp problem.
+- Optimistic with pentest split into **3 monthly installments of $7,500** (wk 19/23/27): wk 19 cash entry $8,467 − $7,500 = $967, then +$3,000/mo net keeps it positive. **Survives.**
+
+### Scenario summary at $25k starting capital
+
+| Scenario | Crossover month (MRR > monthly outflow) | Wk-19 cash position w/ pentest net-60 lump | Verdict |
 |---|---|---|---|
-| Pessimistic | wk 4 post-launch (≈day 30) | $33,400 | 66+ months at current burn |
-| Baseline | wk 2 post-launch (≈day 15) | $79,000 | undefined-positive |
-| Optimistic | wk 1 post-launch | $139,000 | undefined-positive |
+| Pessimistic | wk 4 post-launch (day 30) — MRR mechanics OK | −$15,463 | **FAILS** — bridge required |
+| Baseline | wk 2 post-launch (day 15) — MRR mechanics OK | −$15,100 | **FAILS** — pentest installments or alpha-MRR required |
+| Optimistic | wk 1 post-launch — MRR mechanics OK | −$14,033 | **FAILS as lump-sum, SURVIVES with 3-installment pentest** |
+
+**The crossover-month math (post-launch unit economics) is healthy in every scenario.** The failure mode at $25k is **timing of one specific invoice (pentest, $22.5k) landing inside the cushion window**. Fix the invoice timing and every scenario survives.
 
 ---
 
-## 4. Cash-injection triggers
+## 4. Cash-injection triggers (expanded for $25k tier)
 
-If runway-remaining at any month drops below the thresholds, take the corresponding action.
+At $25k, vague triggers don't work. Each trigger is now **runway-month-remaining**-based with explicit action ladders.
 
-| Trigger | Action |
-|---|---|
-| **Cash on hand < $15,000 AND pre-launch (before M5)** | Cut burn: defer WCAG audit to V1.5 launch (PRD §14.6 says "third-party audit before M5" — Comply must re-negotiate the binding date, or down-scope to internal axe-core + Halo manual review; risk: M4 exit gate slips). Talk to vendors about installment terms. |
-| **Cash on hand < $25,000 AND pentest invoice landing (M3 wk 11)** | Negotiate 60-day net terms with pentest vendor (Trail of Bits / Doyensec do offer this for early-stage); shifts ~$22k from M3 outflow to M5 outflow when MRR starts. |
-| **Cash on hand < $5,000 post-launch** | Emergency: raise bridge (friends-family `EST` $25k–$50k) OR shift go-to-market: drop free tier entirely (negative-contribution channel) → all signups become BYOK Starter trial (7-day) → forces faster conversion. PRD §12 free-tier safeguards already constrain it; tightening to a 7-day trial is a quick lever. |
-| **MRR ramp at day 30 < $500** (50% below pessimistic) | Shift go-to-market: re-allocate 100% of time from Sprint's organic channels to high-conversion direct outreach (Discord DMs in indie communities, Hacker News thread engagement, Cursor / Bolt forum presence). Trigger Penny + Scout pricing review (D4 A/B rotation enabled). |
-| **Day-60 paying < 10 customers** | Bigger problem: positioning misread (PRD §19 R10). Cut burn (pause WCAG / pause Auto-PR build → V2 instead of V1.5) AND re-launch via the most-effective channel from M5 data. |
-| **Anthropic monthly bill > $200/customer in Managed tier** | Cap fired correctly per unit-economics §6 but cap is too loose. Tighten Managed Starter cap from $15 → $10/tenant/mo. |
-| **Stripe processing rate ≠ 2.9% as modeled** | Already conservative; if PRD prompt's "1.5%" was meant for European cards on Stripe via local-method routing, recompute → margins improve, not worsen. No action needed. |
+### 4.1 Cut-burn trigger ladder (taken in this order as cushion drops)
 
-**Hard runway floor (Meter):** Jo holds back **$15,000 emergency reserve** that does NOT participate in scenario math. The cushion math above assumes this reserve is untouched. If touched, all triggers escalate one severity level.
-
----
-
-## 5. Sprint-alignment check
-
-Sprint's milestone calendar (PRD §16 placeholder + `sprint/milestone-M*.md`):
-- M0 (week 2) → M1 (week 6) → M2 (week 9) → M3 (week 11) → M4 (week 14) → M5 (week 16) → V1.5 (week 22) → V2 (week 28) → V2.1 (week 34)
-
-**Cash-event alignment vs Sprint calendar:**
-
-| Sprint event | Cash event | Aligned? |
+| Cash on hand at any week | Cut-burn action | Monthly savings |
 |---|---|---|
-| M0 wk 2 | Fixed burn starts | ✓ |
-| M0 close | Pentest + WCAG vendors engaged (R14/R15 lead-times); no cash yet | ✓ |
-| M2 wk 9 | Stripe live; first paying customers possible (Managed Starter ships); MRR ramp could start pre-M5 if Sprint opens Managed-tier preview to waitlist | ✓ — **opportunity:** consider opening Managed-tier preview at M2 close to a waitlist subset (10-customer alpha). Pulls MRR forward by ~7 weeks. Coordinate with Signal + Penny. |
-| M3 wk 11 | Pentest invoice $22,500 lands | **CRUNCH POINT** — cushion at this point `EST` $50,000 − $338 (M0–M2 fixed) − $7,500 pre-M0 = $42,162 going in; pentest drains $22,500 → $19,662 remaining before M4 |
-| M4 wk 14 | WCAG audit invoice $10,000 + Resend starts billing | M4 cushion `EST` $19,662 − $113 (M3 partial) − $10,000 = $9,549 |
-| M5 wk 16 | Launch; MRR ramp starts | M5 entry cushion `EST` $9,387 (matches §1 number) |
-| V1.5 wk 22 | Auto-PR launches; expansion-rev kicks in | By then baseline MRR has been ramping 6 weeks → `EST` $1,500–$2,500/mo offsetting Auto-PR's COGS |
+| **< $20,000** (≈wk 8, after legal+early-M0) | Tier-1 cuts: PostHog stays free; verify Resend free tier covers M4 (3k emails); audit any subscriptions added between phases | `EST` $0–$50 |
+| **< $15,000** (≈wk 11, M3 entry) | Tier-2 cuts: **kill Sentry Team plan ($26 → $0 free tier; lose 50k errors/mo cap; accept developer-tier error budget for MVP)**; cancel any 1Password/Linear paid plans that aren't load-bearing | `EST` $30–$60 |
+| **< $10,000** (≈wk 14, M4 entry) | Tier-3 cuts: **defer WCAG audit to V1.5** (PRD §14.6 says "before M5" — slipping it to V1.5 is a PRD spec edit, must coordinate with Halo + Comply + Herald); axe-core + internal Halo review becomes the M5 launch story; **M4 exit gate moves**. R15 reopens — owner: Halo. | `EST` $10,000 (WCAG deferred) |
+| **< $5,000** (post-launch, anytime) | Tier-4 emergency cuts: drop free tier entirely → all signups become BYOK Starter 7-day trial; pause V1.5 Auto-PR build → ship V2 instead | `EST` $113/mo free-tier COGS saved + faster paid conversion |
+| **< $2,000** | Cash flat. Stop. Triage with Crash. | — |
 
-**Crunch point: M3 → M5.** Between pentest cash-out (wk 11) and first paying-customer MRR (wk 17+), Jo's cushion thins to `EST` $9,000–$10,000. This is enough to survive in baseline but leaves no margin for vendor-cost overrun or M4 slip.
+### 4.2 Cash-injection (raise) trigger ladder
 
-**Sprint coordination recommendation (Meter, to Sprint):**
-- Open Managed-tier alpha at M2 close to waitlist (Signal's `/coming-soon` from sprint/milestone-M0 deliverables). 5–10 alpha customers × $99 = $495–$990/mo MRR pulled forward by 7 weeks. Adds `EST` $3,500 cushion by M5.
-- Negotiate pentest vendor 30-day or 60-day net terms (industry-standard for Trail of Bits / Doyensec early-stage engagements). Shifts $22,500 from wk 11 to wk 14 or wk 19. Closes M3 cash crunch.
+| Cash on hand AND time-window | Action | Amount |
+|---|---|---|
+| **< $10,000 AND wk ≤ 14 (pre-launch)** | Bridge from personal credit / friends-family. Don't burn week 14 trying to fundraise externally — bridge it. | `EST` $10–$15k |
+| **< $5,000 AND wk 17–22 (post-launch, pre-pentest-cash-due)** | **Active fundraise — talk to angel networks (Indie.vc / Calm Fund / Hustle Fund) immediately.** 60-day-net pentest cash-out at wk 19 forces this. | `EST` $25–$50k |
+| **Wk 19 pentest invoice due AND cash < $25,000** | Pre-arranged: pentest vendor accepts 3-installment payment plan ($7.5k/mo wk 19/23/27). Locked at M0-close negotiation. **This is the planning baseline at $25k.** | n/a — structured |
+| **Day-60 MRR < $762 (pessimistic miss)** | Emergency bridge `EST` $25k friends-family; concurrent GTM pivot (see §4.3) | $25k |
+
+### 4.3 GTM-shift trigger ladder
+
+| Signal | Action | Owner |
+|---|---|---|
+| **Day-30 paying < 6 customers** (50% of pessimistic) | Signal + Penny pivot: kill SEO investment (slow ramp), 100% into direct outreach (Discord DMs in indie communities, HN front-page push, Cursor / Bolt forum presence). Trigger Penny D4 A/B rotation at $19 Starter. | Signal + Penny |
+| **Day-60 paying < 10 customers** | Positioning misread (PRD §19 R10 fires). Cut WCAG; pause Auto-PR build → V2 instead of V1.5; relaunch via highest-converting channel from M5 data; consider second positioning angle (e.g., "agentic-code reviewer" if "audit" reads as too compliance-heavy) | Scout + Penny + Signal |
+| **Managed mode token spend > $200/tenant/mo** (cap working but loose) | Tighten Managed Starter cap from $15 → $10/tenant/mo per `unit-economics.md` §6 | Meter + Forge |
+
+### 4.4 Hard runway floor
+
+**Meter holds the line: Jo MUST maintain $3,000 untouchable emergency reserve** through M5 launch. At $25k starting capital, this means scenario math runs against $22,000 of usable capital, NOT $25,000. **The above tables already assume this.** If Jo touches the $3k reserve, every trigger above escalates one severity tier.
 
 ---
 
-## 6. Meter's exit-gate self-verdict
+## 5. Sprint-alignment check (crunch points at $25k)
+
+### 5.1 Vendor-invoice calendar vs Sprint milestones
+
+| Wk | Sprint event | Cash event | Cash position (baseline, no mitigation) |
+|---|---|---|---|
+| 0 | Pre-M0 | Legal $5,500 + Comply $2,000 cash-out | $25,000 → $17,500 |
+| 1–9 | M0–M2 (fixed burn ramp) | $338 cumulative fixed | $17,162 |
+| 10–11 | M3 (pentest delivered + invoiced) | $81 fixed; pentest INVOICED but NOT YET CASH-OUT (net-60) | $17,081 |
+| 12–14 | M4 (WCAG audit) | $113 fixed; **WCAG $10,000 cash-out wk 14 (net-0 default)** | $6,968 |
+| 15–16 | M5 prep + launch | $81 fixed; $300 first MRR inflow (early waitlist conversion) | $7,187 |
+| 17–18 | Post-launch ramp | Fixed $80; MRR `EST` $500 inflow | $7,607 |
+| 19 | **PENTEST CASH-OUT $22,500 (net-60)** | Fixed $40; MRR `EST` $300 inflow; **pentest -$22,500** | **−$14,553** |
+
+**Crunch point #1: WCAG @ wk 14.** $10k cash-out drops cushion from $17k → $7k just before launch. If WCAG also negotiates net-30 (Meter recommends), cash-out moves to wk 18 (post-launch) where MRR can absorb part of it.
+
+**Crunch point #2: Pentest @ wk 19 (under net-60).** $22.5k cash-out 3 weeks post-launch breaches into negative under every ramp scenario. **This is the structural blocker at $25k.**
+
+### 5.2 Recommended Sprint coordination
+
+Meter, to Sprint and the Phase-4 leads:
+
+1. **Pentest terms — 3-installment plan (LOCKED PLANNING BASELINE):** Shield negotiates at M0 close: $7,500 cash on report delivery (wk 11) + $7,500 net-60 (wk 19) + $7,500 net-90 (wk 23). Vendors that don't accept installments: drop from short-list. Meter blocks pentest contract sign-off without installment terms or ≥ net-60 simple terms.
+2. **WCAG terms — net-30 minimum (NEW RECOMMENDATION):** Halo + Comply negotiate at vendor sign-off (M1 close, wk 6): $0 deposit; full invoice net-30 from report delivery. Moves $10k cash-out from wk 14 to wk 18. Adds $10k to Day-0 launch cushion. Coordinate with Comply (DPA template will already touch this vendor).
+3. **Managed-tier waitlist alpha at M2 close (wk 9):** Open 5–10 Managed Starter slots to waitlist-confirmed customers as private alpha. $99 × 7 alpha customers × 7 weeks pre-launch = `EST` $4,851 MRR pulled forward into wks 10–16. Adds `EST` $4–5k to launch cushion. Coordinate with Signal (`/coming-soon` from `sprint/milestone-M0.md`) + Penny (alpha pricing review) + Atlas (Stripe webhook live at M2 already).
+4. **Sentry kill-switch ready at wk 10:** If cushion < $15k at wk 10, immediate downgrade to free tier. Saves $26/mo. Marginal but symbolic — signals to Jo the cut-burn ladder has triggered.
+
+With (1) + (2) + (3) all executed: launch-day cushion `EST` $16,000 (vs $6,887 baseline) and pentest cash-out distributes across 3 months of post-launch MRR. **Baseline survives.** Pessimistic still requires bridge.
+
+---
+
+## 6. Meter's exit-gate self-verdict (re-verdict at $25k)
 
 **Phase-7 gate per `BUILD_FLOW.md`:** runway sustains Sprint's M0–M5 calendar; cash-injection triggers documented.
 
-| Check | Status |
+| Check | Status at $25k LOCKED |
 |---|---|
-| Runway sustains M0–M5 calendar at `EST` $50,000 starting capital? | ✓ **YES with two mitigations:** (a) negotiate pentest 30-day-net terms at M0 close; (b) open Managed alpha at M2 close to pull MRR forward |
-| Pessimistic scenario (10 paying customers in 60d) survives? | ✓ YES — pre-launch burn is the bottleneck; post-launch unit economics are strong enough that even slow ramp clears crossover by day 30 |
-| Cash-injection triggers documented with action? | ✓ YES — seven triggers in §4 |
-| Jo's actual starting capital documented? | ✗ **OPEN — Jo must confirm `EST` $50,000 baseline** before this doc commits to scenarios. If Jo's actual capital is <$30k, pre-launch outflow $40,600 breaches before M5 launch; pentest and WCAG must be deferred or financed. **Block on Jo confirming.** |
-| Founder compensation modeled? | ✗ **OPEN — `EST` $0 cash compensation assumed.** If Jo draws even $3,000/mo personal salary, pre-launch cumulative outflow rises by `EST` $12,000 over 4 months, breaching cushion. **Block on Jo confirming.** |
-| 16-week M0–M5 calendar (PRD §16) matches Sprint's actual schedule? | ✓ Placeholder weeks per PRD §16; Sprint firms up after M0 lands per PRD §16 last line. Recompute when firm. |
+| Starting capital documented? | ✓ LOCKED $25,000 (Jo, 2026-05-11) |
+| Founder compensation modeled? | ✓ LOCKED $0/mo through M5 (Jo, 2026-05-11) |
+| Runway sustains M0–M5 calendar at $25k? | ⚠ **CONDITIONAL** — requires ALL of: (a) pentest 3-installment terms at M0-close negotiation, (b) WCAG net-30 terms at M1-close negotiation, (c) Managed alpha at M2 close pulling MRR forward |
+| Pessimistic scenario (10 paying in 60d) survives at $25k? | ✗ NO — requires bridge financing $15k OR scenario-redefinition (deferred WCAG) |
+| Baseline scenario survives at $25k? | ⚠ ONLY with installment-pentest + net-30-WCAG + alpha-MRR. Lump-sum pentest cash-out fails baseline. |
+| Optimistic scenario survives at $25k? | ⚠ Survives ONLY with pentest installments. Lump-sum still fails optimistic. |
+| Cash-injection triggers documented with action? | ✓ 13 explicit triggers in §4 across cut-burn / raise / GTM-shift |
+| 16-week M0–M5 calendar (PRD §16) matches Sprint? | ✓ Placeholder weeks per PRD §16; recompute when Sprint firms up after M0 |
 
-**Meter's verdict: PASS WITH FIXES.** Runway is viable for M0–M5 under stated assumptions. **Two open dependencies require Jo's input:**
-1. Confirm starting capital. The `EST` $50,000 baseline is a planning assumption only.
-2. Confirm $0 cash compensation OR specify monthly draw — model recomputes proportionally.
+### 6.1 Verdict
 
-Without these, the verdict is conditional. With them, runway is defensible and Sprint's calendar holds.
+**Meter's verdict at $25k LOCKED: PASS WITH FIXES — but the fixes are now BLOCKERS, not recommendations.**
+
+The four blocking fixes:
+
+1. **BLOCKER:** Pentest contract signed at M0 close MUST include installment payment terms (3-tranche or ≥ net-60-on-half). Without this, baseline AND optimistic both fail in cash terms at wk 19. Owner: Shield + Penny. Deadline: M0 close.
+2. **BLOCKER:** WCAG audit contract signed at M1 close MUST include net-30 terms (no upfront / no net-0 default). Without this, launch-day cushion is $6,887 — too thin to absorb any wk-15-17 fixed-burn variance. Owner: Halo + Comply. Deadline: M1 close.
+3. **BLOCKER:** Managed-tier alpha at M2 close MUST land ≥ 5 paying alpha customers by wk 14. Pulls $2,500–$4,000 MRR into pre-launch cushion. Owner: Signal + Penny + Atlas + BigBrain (greenlight). Deadline: M2 close.
+4. **CONDITIONAL (not blocker):** Jo holds $3,000 untouchable emergency reserve through M5. Math runs against $22k usable capital. If breached, every cut-burn trigger escalates.
+
+If all three blockers land: **PASS.** If any one slips: **FAIL — Jo must bridge $15–25k or defer Phase-7 launch by 4 weeks while M0–M5 re-baselines.**
+
+### 6.2 New risk for Sprint (PRD §19 + owner-matrix.md inheritance)
+
+**NEW R20:** Cash-runway crunch at M3 → M5 under $25k starting capital + lump-sum vendor payment terms.
+
+| Field | Value |
+|---|---|
+| **Likelihood** | High (default vendor terms are net-0 / on-receipt for first-engagement customers) |
+| **Impact** | Critical (pre-launch cash floor breaches at wk 14 / wk 19) |
+| **Mitigation owner** | Meter (cash-flow modeling) + Shield (pentest negotiation) + Halo+Comply (WCAG negotiation) + Signal+Penny (alpha-MRR pull-forward) |
+| **Mitigation deadline** | M0 close (pentest terms signed) + M1 close (WCAG terms signed) + M2 close (alpha launched ≥5 paying) |
+| **Verification** | `finance/runway.md` §6 recomputed at each milestone close; cushion floor never < $3,000; pentest invoice cash-out installment receipts filed at `compliance/pentest-vendor-engagement.md` |
+
+R20 inherits into:
+- `sprint/owner-matrix.md` §2 risk matrix as **NEW R20 Cash-runway crunch (M3→M5)**.
+- `PRD.md` §19 as a new row paralleling R1 LLM cost overrun — same shape (financial-risk class).
+
+### 6.3 Soft warnings (not blockers but Jo should know)
+
+- **At $25k, Jo has zero margin for any unbudgeted vendor cost.** If Cipher needs a Vault upgrade, if Terra needs a paid Cloudflare tier above Pro, if any tool adds a seat-licensing surprise — every $200/mo unbudgeted line eats 6 weeks of fixed burn cushion.
+- **At $25k, Stripe's hold-period on first charges (7–14 days for new accounts) matters.** First-charge MRR doesn't arrive on day-of-charge; it arrives 1–2 weeks later. Wks 17–19 cash inflow numbers in §5 already conservatively assume this delay.
+- **At $25k, Jo cannot afford a M4 slip.** Every week of M4 slip = $40 fixed burn + 1 week of delayed MRR. By wk 18 with no launch, cushion = $5k. By wk 20, cushion = $4k. Sprint's M4 exit gate becomes a cash-survival gate, not just a feature-completion gate.
 
 ---
 
-*End of runway.md v0.1. Meter — DevOps Layer.*
+*End of runway.md v0.2. Meter — DevOps Layer.*
+*Recomputed 2026-05-11 with Jo's three locked inputs: $25k starting capital, $0 cash comp, pentest 30/60-day-net negotiation at M0 close.*
