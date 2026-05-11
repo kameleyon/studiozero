@@ -131,6 +131,7 @@ Mirrors `architecture/test-strategy.md` §3 M2 exactly. M0 + M1 gates remain gre
 - [ ] `0003_billing_managed.sql` applies cleanly to staging.
 - [ ] **Compass AH-6 closed (Jury M5):** `projects.client_tag` in `0003_billing_managed.sql`; UI wired.
 - [ ] **Jury M6 closed:** `docs/sku-mapping.md` published, Compass-reviewed.
+- [ ] **R21 mitigation (c) — Managed-tier alpha ≥5 paying customers LIVE** (hard gate, not Sprint default). Signal + Penny + Atlas drive alpha recruitment from M0 build-in-public audience. Metric: `subscriptions.status IN ('active','trialing') AND plan_family IN ('managed_starter','managed_pro') >= 5`. Pulls MRR forward 7 weeks. **If <5 paying alpha at M2 close: R21 triggers — Jo bridges $15-25k or M2 re-baselines.**
 
 ## Risks specific to this milestone
 
@@ -140,6 +141,7 @@ Mirrors `architecture/test-strategy.md` §3 M2 exactly. M0 + M1 gates remain gre
 | R10 | Pricing positioning misread (commodity vs premium) | Medium | Medium | Penny (revisit after first 5 paying customers) | M2 close — first paying customers acquired; data feeds back to Penny |
 | R17 | D4 unresolved at M2 ticket-cut | Medium | Medium | Penny + Jo (decide by week 7) | M2 ticket-cut — default $29 + A/B slot |
 | R20 | FTC Click-to-Cancel (16 CFR 425) compliance late | Low | High | Comply + Ledger (UI must allow cancel in same channel as signup) | M2 — Stripe Customer Portal cancel UX |
+| **R21** | **Cash-runway crunch — Managed-tier alpha <5 paying at M2 close** | High | Critical | Signal + Penny + Atlas (alpha recruitment from M0+ build-in-public audience); Meter (cash-reserve tracking) | M2 close — hard exit gate. If miss → Jo bridges $15-25k or M2 re-baselines +4 weeks. |
 
 ## Decisions that MUST land before milestone exit
 

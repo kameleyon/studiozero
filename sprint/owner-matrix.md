@@ -109,6 +109,7 @@ Every PRD §19 row maps to ≥1 milestone's "Risks specific to this milestone" s
 | **NEW R18** | **Auto-PR attach rate below assumption** (V1.5 economic model assumed >15% Pro-tier attach) | Medium | High | **Penny + Hook** (monitor attach rate; ICE-prioritize improvements) | **V1.5 + 30 days** (first attach-rate cohort) |
 | **NEW R19** | **Self-dogfood gate FAILs at M2 or later** (Studio Zero's own M2 codebase scores < 70) | Medium | High | **BigBrain** (escalation), Jury (verdict), all layer leads (remediation) | **Per-milestone** — milestone does not close until dogfood PASSes |
 | **NEW R20** | **Stripe Click-to-Cancel (16 CFR 425) compliance late** — FTC rule binds in 2026 calendar window | Low | High | **Comply + Ledger** (UI must allow cancel in same channel as signup) | **M2** (Stripe go-live; UI gate in `billing-and-cancel.md`) |
+| **NEW R21 (Jo lock 2026-05-11)** | **Cash-runway crunch at $25k starting capital** — pentest (~$22.5k) + WCAG (~$10k) bills land wk 11–19; Day-0 cash $6.9k; all 3 scenarios FAIL at wk 19 under lump-sum terms | **High** | **Critical** | **(a) pentest installments — Shield + Penny @ M0 close; (b) WCAG net-30 — Halo + Comply @ M1 close; (c) Managed-tier alpha ≥5 paying — Signal + Penny + Atlas @ M2 close; (d) $3k untouchable reserve — Meter ongoing** | **M0** (a) → **M1** (b) → **M2** (c). If any slips: Jo bridges $15-25k OR M0-M5 re-baselines +4 weeks. |
 
 ---
 
@@ -118,9 +119,9 @@ For Phase 6 Jury Exit Gate verification: every milestone closes ≥1 decision. N
 
 | Milestone | Decisions closing here |
 |---|---|
-| **M0** | Jury B1, B2, B3, C1, C2, C3, C4, M1 (IaC), M2 (Shield TB-3 stale), Cipher Fix-1, Fix-3a, Fix-3d, Fix-4; ARCH-D2 (Terra provisions); D6 (reorder reflected); D8 (locked in decisions.md, ship at M1); #18 (interim machinery on first synthetic run). |
-| **M1** | D1 (GH App), D2 (free tier), D9 (4 corpora green), IA-D1/D2/D3, #19 (BYOK pass-through ToS), ARCH-D1 (pg-boss), ARCH-D3 (mint+RLS+revocation), ARCH-D7 (Edge Fn lint), ARCH-D9 (egress primitive), Cipher Fix-2, Fix-3b, Fix-5; R2/R4/R5/R9/R16 mitigations. |
-| **M2** | **D4 (must decide by ticket-cut)**, #17 (DPA + subprocessors), #20 (regional refund), D21 (synth stall), D22 (cooling-off reset), ARCH-D4 (Stripe webhook), ARCH-D5 (Realtime fan-out budget), Jury M5 (`client_tag`), Jury M6 (SKU mapping); R1/R20 mitigations. |
+| **M0** | Jury B1, B2, B3, C1, C2, C3, C4, M1 (IaC), M2 (Shield TB-3 stale), Cipher Fix-1, Fix-3a, Fix-3d, Fix-4; ARCH-D2 (Terra provisions); D6 (reorder reflected); D8 (locked in decisions.md, ship at M1); #18 (interim machinery on first synthetic run); **R21 mitigation (a) — pentest installment letter signed**. |
+| **M1** | D1 (GH App), D2 (free tier), D9 (4 corpora green), IA-D1/D2/D3, #19 (BYOK pass-through ToS), ARCH-D1 (pg-boss), ARCH-D3 (mint+RLS+revocation), ARCH-D7 (Edge Fn lint), ARCH-D9 (egress primitive), Cipher Fix-2, Fix-3b, Fix-5; R2/R4/R5/R9/R16 mitigations; **R21 mitigation (b) — WCAG vendor net-30 letter signed**. |
+| **M2** | **D4 (must decide by ticket-cut)**, #17 (DPA + subprocessors), #20 (regional refund), D21 (synth stall), D22 (cooling-off reset), ARCH-D4 (Stripe webhook), ARCH-D5 (Realtime fan-out budget), Jury M5 (`client_tag`), Jury M6 (SKU mapping); R1/R20 mitigations; **R21 mitigation (c) — Managed-tier alpha ≥5 paying (HARD GATE)**. |
 | **M3** | D7 (CLI watermark), ARCH-D10 (cli_heartbeat), Cipher Fix-3c (Ed25519 manifest); **external pentest ≤1 Major/0 Critical**; R6 mitigation. |
 | **M4** | **WCAG 2.2 AA third-party conformance audit signed off** (R15 closes); GDPR right-to-delete e2e (R5 secondary close); E1–E5 trigger correctness; status page live. |
 | **M5** | DMCA Designated Agent registered; ≥4 GTM channels active; R10 first read (5 paying customers landed); day-zero runbook signed off; full regression matrix re-run. |

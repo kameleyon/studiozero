@@ -128,6 +128,7 @@ Pulled from PRD §16 M0 row + `test-strategy.md` §3 M0 + Phase-5 Jury verdict r
 - [ ] First synthetic Surface run emits `X-AI-Generated: studio-zero` HTTP header — `tests/integration/disclosure-headers.spec.ts` green.
 - [ ] **D8 sandbox choice locked** — grep `architecture/decisions.md` for "rootless container + dropped caps + seccomp + egress allowlist; Firecracker V2 graduation" → match.
 - [ ] CLI ↔ web pairing prototype demo green — `tests/integration/cli-pairing-prototype.spec.ts` green.
+- [ ] **R21 mitigation (a) — Pentest vendor installment terms LOCKED in engagement letter** (3 payments over M3 / M4 / M5; never lump-sum at wk 19). Letter signed by Shield + Penny + Jo. File: `compliance/pentest-engagement-2026.pdf` exists in HEAD with installment schedule.
 - [ ] RLS schema scaffolded — `architecture/database/migrations/0001_initial.sql` applies cleanly to a fresh Testcontainers Postgres; `pnpm test rls:smoke` green.
 - [ ] Tenant-scoped JWT minting demo green — `tests/integration/jwt-mint-tenant-scoped.spec.ts` green.
 - [ ] **Phase-5 Jury Blockers closed in HEAD:**

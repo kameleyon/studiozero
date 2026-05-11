@@ -144,6 +144,7 @@ Mirrors `architecture/test-strategy.md` §3 M1 exactly. M0 gates remain green (r
 - [ ] axe-core PR-blocking gate green on every primary-flow page at 320 / 768 / 1280 px — no Critical or Serious violations.
 - [ ] `tests/integration/jwt-mint-tenant-scoped.spec.ts` green (full M1 version — replaces M0 prototype).
 - [ ] `0002_rls_and_runner_jwt.sql` applies cleanly to staging.
+- [ ] **R21 mitigation (b) — WCAG conformance vendor net-30 (or better) terms LOCKED in engagement letter** (~$10k bill payable wk 18+ to align with MRR ramp). Letter signed by Halo + Comply + Jo. File: `compliance/wcag-audit-engagement-2026.pdf` exists in HEAD with payment terms.
 - [ ] **ARCH-D9 closed:** egress allowlist primitive specced and enforced; `architecture/iac/runner-pool/network-policy.yaml` committed; integration test exercises a blocked egress destination.
 
 ## Risks specific to this milestone

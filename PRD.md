@@ -731,6 +731,7 @@ Each Goal in §4 maps to a binary acceptance test. Specified in `tests/acceptanc
 | Studio Zero ships a build with a bug we should have caught | High | Medium | Self-dogfood gate at every milestone (§18.4) |
 | Concentration risk on Anthropic | Medium | High | Abstract the LLM provider in the runner; add a second provider in V2 |
 | Pricing positioning misread (commodity vs premium) | Medium | Medium | Penny revisits after first 5 customers; D4/D5 still open |
+| **R21 Cash-runway crunch at $25k starting capital (added v0.5, 2026-05-11)** — pentest invoice (~$22.5k) and WCAG audit (~$10k) land between weeks 11–19 with structurally inadequate Day-0 cash cushion ($6.9k); all 3 ramp scenarios FAIL at week 19 under lump-sum vendor terms | High | Critical | **Four mandatory mitigations** (per Meter Phase 7 v0.2 recompute): (a) pentest installments locked at M0 close (Shield + Penny); (b) WCAG net-30 terms locked at M1 close (Halo + Comply); (c) Managed-tier alpha ≥5 paying at M2 close (Signal + Penny + Atlas — pulls MRR forward 7 weeks); (d) $3k untouchable reserve. If any mitigation slips: Jo bridges $15-25k OR M0-M5 re-baselines by +4 weeks. Tracked in `sprint/owner-matrix.md` R21. |
 
 ---
 
