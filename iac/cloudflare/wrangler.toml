@@ -1,0 +1,44 @@
+# Studio Zero — Cloudflare Worker config (drop into wrangler.toml)
+# For projects using Cloudflare Workers, R2, KV, or Durable Objects.
+
+name = "studio-zero-worker"
+main = "src/worker.ts"
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Per-environment settings — staging and production overrides
+[env.production]
+name = "studio-zero-worker-prod"
+routes = [
+  { pattern = "yourdomain.com/api/*", zone_name = "yourdomain.com" }
+]
+
+[env.staging]
+name = "studio-zero-worker-staging"
+routes = [
+  { pattern = "staging.yourdomain.com/api/*", zone_name = "yourdomain.com" }
+]
+
+# KV namespaces — created via `wrangler kv:namespace create <name>`
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "..."
+
+# R2 buckets — created via `wrangler r2 bucket create <name>`
+# [[r2_buckets]]
+# binding = "ASSETS"
+# bucket_name = "studio-zero-assets"
+
+# Durable Objects — for stateful edge handlers (sessions, rate limits, etc.)
+# [[durable_objects.bindings]]
+# name = "RATE_LIMITER"
+# class_name = "RateLimiter"
+
+# Environment variables (use secrets via `wrangler secret put` for sensitive values)
+[vars]
+LOG_LEVEL = "info"
+
+# Build settings
+[build]
+command = "npm run build:worker"

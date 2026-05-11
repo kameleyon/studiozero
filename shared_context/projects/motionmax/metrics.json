@@ -1,0 +1,52 @@
+{
+  "project_slug": "motionmax",
+  "events": [
+    {
+      "event_id": "audit-motionmax-2026-05-09-historical",
+      "event_type": "audit_run",
+      "timestamp": "2026-05-09T21:13:00.000Z",
+      "duration_seconds": 960,
+      "outcome": "failed",
+      "artifacts_written": [
+        "shared_context/audits/motionmax/2026-05-10/verdict.md",
+        "shared_context/audits/motionmax/2026-05-10/optic.md",
+        "shared_context/audits/motionmax/2026-05-10/proof.md",
+        "shared_context/audits/motionmax/2026-05-10/halo.md",
+        "shared_context/audits/motionmax/2026-05-10/compass.md",
+        "shared_context/audits/motionmax/2026-05-10/trace.md",
+        "shared_context/audits/motionmax/2026-05-10/canon.md"
+      ],
+      "context": {
+        "verdict": "FAIL",
+        "verdict_version": "v2 (re-synthesized with Canon folded in)",
+        "reviewers_succeeded": 6,
+        "reviewers_failed": 0,
+        "metering_note": "BACKFILL ENTRY — this audit ran before metering was wired into audit-run.js. Token counts and $/audit are unmeasured. Schema present so the project has a baseline; future audits will record full metrics. See shared_context/projects/_case-studies/motionmax-audit-2026-05-09.md action item #4.",
+        "per_reviewer": [
+          { "reviewer": "compass", "outcome": "success",                "duration_seconds": 388.1, "tokens_in": null, "tokens_out": null, "cost_usd": null },
+          { "reviewer": "halo",    "outcome": "success",                "duration_seconds": 453.3, "tokens_in": null, "tokens_out": null, "cost_usd": null },
+          { "reviewer": "optic",   "outcome": "success",                "duration_seconds": 463.8, "tokens_in": null, "tokens_out": null, "cost_usd": null },
+          { "reviewer": "trace",   "outcome": "success",                "duration_seconds": 513.5, "tokens_in": null, "tokens_out": null, "cost_usd": null },
+          { "reviewer": "proof",   "outcome": "success",                "duration_seconds": 598.8, "tokens_in": null, "tokens_out": null, "cost_usd": null },
+          { "reviewer": "canon",   "outcome": "wrote-then-timed-out",   "duration_seconds": 600.0, "tokens_in": null, "tokens_out": null, "cost_usd": null }
+        ],
+        "jury": {
+          "outcome": "success",
+          "version": "v2 (after fixes shipped)",
+          "duration_seconds": 480,
+          "tokens_in": null, "tokens_out": null, "cost_usd": null
+        },
+        "total_tokens_in": null,
+        "total_tokens_out": null,
+        "total_cost_usd": null,
+        "audit_severity_counts": {
+          "Blocker": 5,
+          "Critical": 24,
+          "Major": 37,
+          "Minor": 24,
+          "Polish": 13
+        }
+      }
+    }
+  ]
+}

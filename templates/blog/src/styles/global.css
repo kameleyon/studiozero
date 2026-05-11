@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+html { font-family: Charter, "Iowan Old Style", Georgia, serif; }
+body { line-height: 1.7; }

@@ -1,0 +1,98 @@
+name: Audit Gate
+
+# The studio's audit gate. Per protocols/code-standards.md:
+#   "No production deploy ships without a Jury verdict of PASS or PASS WITH FIXES."
+# This workflow enforces it.
+#
+# Triggers:
+#   - manual (workflow_dispatch) — run a fresh audit on demand
+#   - before any deploy job (use as a `needs:` for your deploy job)
+
+on:
+  workflow_dispatch:
+    inputs:
+      slug:
+        description: "Project slug (kebab-case, no spaces)"
+        required: true
+      brief:
+        description: "Audit brief — what is this project, who is it for"
+        required: true
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, ready_for_review, labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    # On PR, only run when the PR is labeled "audit-required" (avoid running on every push).
+    # On manual dispatch, always run.
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'audit-required')
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          path: project
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          repository: ${{ secrets.STUDIO_ZERO_REPO || 'your-org/studio-zero' }}
+          token: ${{ secrets.STUDIO_ZERO_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          path: studio-zero
+
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with: { node-version: 24 }
+
+      - name: Install studio-zero deps
+        working-directory: studio-zero
+        run: npm ci
+
+      - name: Run audit panel
+        id: audit
+        working-directory: studio-zero
+        env:
+          # Studio-zero uses Claude Code CLI by default — provide an API token
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          SLUG="${{ github.event.inputs.slug || github.event.pull_request.head.ref }}"
+          BRIEF="${{ github.event.inputs.brief || format('Pre-merge audit for PR #{0}', github.event.pull_request.number) }}"
+          set +e
+          node audit-run.js "$SLUG" "$BRIEF" --project-dir "${GITHUB_WORKSPACE}/project"
+          EXIT_CODE=$?
+          set -e
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: audit-${{ github.event.inputs.slug || github.event.pull_request.number }}
+          path: studio-zero/shared_context/audits/
+
+      - name: Comment verdict on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const auditRoot = `studio-zero/shared_context/audits/${context.payload.pull_request.head.ref}`;
+            if (!fs.existsSync(auditRoot)) return;
+            const dates = fs.readdirSync(auditRoot).sort().reverse();
+            if (!dates.length) return;
+            const verdictPath = path.join(auditRoot, dates[0], 'verdict.md');
+            if (!fs.existsSync(verdictPath)) return;
+            const body = fs.readFileSync(verdictPath, 'utf8').slice(0, 8000);
+            github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Studio Zero Audit Verdict\n\n${body}`,
+            });
+
+      - name: Fail the workflow on FAIL verdict
+        if: steps.audit.outputs.exit_code != '0'
+        run: |
+          echo "::error::Audit verdict was FAIL or could not complete. Production deploy is blocked until findings are remediated and re-audited."
+          exit 1

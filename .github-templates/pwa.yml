@@ -1,0 +1,34 @@
+name: CI — PWA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - name: Verify service worker generated
+        run: test -f dist/sw.js && echo "✓ sw.js"
+      - name: Verify manifest generated
+        run: test -f dist/manifest.webmanifest && echo "✓ manifest"
+
+  lighthouse-pwa:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npx -y @lhci/cli@0.14.x autorun --upload.target=temporary-public-storage

@@ -1,0 +1,60 @@
+You are dispatched by BigBrain (Director of Studio Zero) to audit MotionMax's NEW template flow for production readiness. Stay strictly within YOUR LAYER. Other agents are covering the rest.
+
+REPO ROOT: C:\Users\Administrator\motionmax
+
+NEW TEMPLATE — these are your scope (do not audit legacy /app, CreateWorkspace, AppShell, AppSidebar, AppHeader unless they directly impact the new flow):
+
+Routes:
+  /dashboard-new           → src/components/dashboard/DashboardLayout.tsx
+  /app/create/new          → src/pages/CreateNew.tsx (uses src/components/intake/IntakeFrame.tsx)
+  /app/editor/:projectId   → src/pages/Editor.tsx (uses src/components/editor/EditorFrame.tsx)
+
+New component folders (audit these in full):
+  src/components/dashboard/  — Sidebar, Hero, ProjectsGallery, RightRail, OnboardingChecklist, LowCreditWarning, NotificationsPopover, HelpPopover, GenerationQueueStatus, DashboardLayout
+  src/components/intake/     — IntakeForm, IntakeFrame, IntakeRail, FeatureToggle, primitives, types
+  src/components/editor/     — EditorFrame, EditorTopBar, MiniSidebar, ScenesColumn, Stage, Timeline, Inspector, BulkOpModal, ConfirmModal, ShareModal, useActiveJobs, useExport, useSceneRegen
+
+Admin section (also in scope — known to have broken API calls):
+  src/pages/Admin.tsx
+  src/components/admin/  — AdminApiCalls, AdminFlags, AdminGenerations, AdminLogs, AdminOverview, AdminPerformanceMetrics, AdminQueueMonitor, AdminRevenue, AdminSubscribers, AdminUserDetails, AdminWorkerHealth
+
+KNOWN ISSUE TO VERIFY (Touch especially, but anyone may catch related issues):
+On mobile, when the voice panel opens in the editor, the "fullsize" button and the "1080p · 24fps" label OVERLAP / COVER the caption + motion controls. Find this in code, identify the exact file:line, and write the fix. Look for similar overlap/stacking issues across the new template.
+
+ADMIN SECTION CONTEXT: API calls are not plug-and-play. Investigate root cause (broken endpoints, missing handlers, wrong table/column names, RLS denials, missing service-role guards, status enum mismatches). User is open to enhancement proposals for admin (mark these as severity LOW with category ADMIN-ENHANCE).
+
+DELIVERABLE: write your audit to:
+  C:\Users\Administrator\motionmax\shared_context\audit-<YOUR-NAME>.md
+
+OUTPUT FORMAT — strictly this, no preamble, no summary:
+
+# Audit: <Your Name> — <Layer>
+
+## <Subcategory 1>
+- [ ] **[CRITICAL][CATEGORY]** Factual one-sentence issue _File: relative/path:line_ Fix: brief solution + where + how _Effort: XS|S|M|L_
+- [ ] **[HIGH][CATEGORY]** ...
+- [ ] **[MEDIUM][CATEGORY]** ...
+- [ ] **[LOW][CATEGORY]** ...
+
+## <Subcategory 2>
+...
+
+SEVERITY DEFINITIONS:
+  CRITICAL — production blocker, security risk, broken feature, data loss, billing bug
+  HIGH     — reliability or UX impact users will notice
+  MEDIUM   — inefficiency, inconsistency, tech debt
+  LOW      — polish, minor a11y, naming, comment
+
+CATEGORIES (use these tags): SECURITY, AUTH, A11Y, MOBILE, UI, UX, PERF, BUNDLE, RENDER, NETWORK, DB, ADMIN, ADMIN-ENHANCE, ERROR-HANDLING, TESTING, BACKEND, INTEGRATION, COMPLIANCE, OBSERVABILITY, DEAD-CODE, DUPLICATION
+
+RULES:
+- Use Grep, Glob, Read, Bash freely. Read every file in your scope. No skimming.
+- File paths RELATIVE to motionmax/ root.
+- No fabrication. If unsure: skip or note "Unable to verify from static analysis".
+- No long em dashes inside finding bodies, use commas or spaces.
+- Brand colors are aqua + gold, do not propose color changes.
+- Keep findings ONE LINE EACH. No multi-paragraph explanations.
+- GROUP by subcategory. SORT by severity within each group (CRITICAL first).
+- Be exhaustive in your layer. Aim for 30 to 80 findings.
+
+START NOW. Read files, write the report. End your response with "AUDIT COMPLETE: shared_context/audit-<YOUR-NAME>.md".

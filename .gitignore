@@ -1,0 +1,29 @@
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+build/
+.cache/
+.next/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Handoff zip + extracted template (re-extract from zip if needed)
+*.zip
+project-template/
+
+# Logs
+*.log
+npm-debug.log*

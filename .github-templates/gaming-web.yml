@@ -1,0 +1,34 @@
+name: CI — Web Game
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - name: Bundle size check
+        run: |
+          # Three.js + R3F + Drei is heavy — flag if vendor chunks exceed budget
+          MAX_VENDOR_KB=600
+          for chunk in dist/assets/three-*.js dist/assets/r3f-*.js; do
+            if [ -f "$chunk" ]; then
+              SIZE=$(du -k "$chunk" | cut -f1)
+              echo "  $chunk = ${SIZE}KB"
+              if [ "$SIZE" -gt "$MAX_VENDOR_KB" ]; then
+                echo "::error::Vendor chunk $chunk exceeds ${MAX_VENDOR_KB}KB budget"
+                exit 1
+              fi
+            fi
+          done

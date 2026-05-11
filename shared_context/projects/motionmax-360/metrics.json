@@ -1,0 +1,123 @@
+{
+  "project_slug": "motionmax-360",
+  "events": [
+    {
+      "event_id": "audit-motionmax-360-2026-05-10-1778383934543",
+      "event_type": "audit_run",
+      "timestamp": "2026-05-10T03:32:14.543Z",
+      "duration_seconds": 12735,
+      "outcome": "success",
+      "artifacts_written": [
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\verdict.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\optic.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\proof.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\halo.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\compass.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\trace.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\canon.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\hook.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\arch.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\prism.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\edge.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\shield.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\cipher.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\verify.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\atlas.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\keeper.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\stream.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\terra.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\crash.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\meter.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\watch.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\chronicle.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\siren.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\probe.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\ghost.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\lens.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\herald.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\signal.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\tongue.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\comply.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\pipeline.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\pixel.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\canvas.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\flow.md",
+        "C:\\Users\\Administrator\\studio-zero\\shared_context\\audits\\motionmax-360\\2026-05-10\\specialists\\forge.md"
+      ],
+      "context": {
+        "verdict": "UNKNOWN",
+        "reviewers_succeeded": 34,
+        "reviewers_failed": 0,
+        "project_dir": "C:\\Users\\Administrator\\motionmax",
+        "per_reviewer": [
+          {
+            "reviewer": "optic",
+            "outcome": "success",
+            "duration_seconds": 274.6,
+            "tokens_in": 14,
+            "tokens_out": 15727,
+            "cache_read_tokens": 727203,
+            "cost_usd": 1.3101090000000002
+          },
+          {
+            "reviewer": "proof",
+            "outcome": "success",
+            "duration_seconds": 359.6,
+            "tokens_in": 106,
+            "tokens_out": 20676,
+            "cache_read_tokens": 1019986,
+            "cost_usd": 1.613373
+          },
+          {
+            "reviewer": "halo",
+            "outcome": "success",
+            "duration_seconds": 447.7,
+            "tokens_in": 17,
+            "tokens_out": 25376,
+            "cache_read_tokens": 1059951,
+            "cost_usd": 1.9097542499999998
+          },
+          {
+            "reviewer": "compass",
+            "outcome": "success",
+            "duration_seconds": 294.6,
+            "tokens_in": 4035,
+            "tokens_out": 15808,
+            "cache_read_tokens": 1051129,
+            "cost_usd": 1.385027
+          },
+          {
+            "reviewer": "trace",
+            "outcome": "success",
+            "duration_seconds": 427.2,
+            "tokens_in": 19,
+            "tokens_out": 16581,
+            "cache_read_tokens": 984707,
+            "cost_usd": 1.5330922499999997
+          },
+          {
+            "reviewer": "canon",
+            "outcome": "success",
+            "duration_seconds": 710.8,
+            "tokens_in": 81,
+            "tokens_out": 35790,
+            "cache_read_tokens": 7306170,
+            "cost_usd": 5.868165
+          }
+        ],
+        "jury": {
+          "outcome": "success",
+          "duration_seconds": 0,
+          "tokens_in": 0,
+          "tokens_out": 0,
+          "cache_read_tokens": 0,
+          "cost_usd": 0
+        },
+        "total_tokens_in": 4272,
+        "total_tokens_out": 129958,
+        "total_cache_read_tokens": 12149146,
+        "total_cost_usd": 13.6195205
+      }
+    }
+  ]
+}

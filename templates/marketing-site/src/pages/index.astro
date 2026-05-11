@@ -1,0 +1,97 @@
+---
+import Base from "../layouts/Base.astro";
+---
+<Base
+  title="Studio Zero — Marketing Site Template"
+  description="Astro + Tailwind 4 marketing site scaffold. Replace this with your real product story."
+>
+  <!-- Hero -->
+  <section class="px-6 pt-20 pb-16 sm:pt-32">
+    <div class="mx-auto max-w-3xl text-center">
+      <h1 class="text-4xl font-bold tracking-tight sm:text-6xl">
+        One sentence that explains what your product does.
+      </h1>
+      <p class="mt-6 text-lg text-zinc-600 sm:text-xl">
+        One paragraph that explains the audience, the outcome, and the differentiator.
+      </p>
+      <div class="mt-10 flex justify-center gap-4">
+        <a
+          href="#cta"
+          class="rounded-md bg-zinc-900 px-6 py-3 text-white font-medium shadow-sm hover:bg-zinc-800 transition"
+        >
+          Primary CTA
+        </a>
+        <a
+          href="#features"
+          class="rounded-md px-6 py-3 font-medium text-zinc-900 ring-1 ring-zinc-200 hover:ring-zinc-300 transition"
+        >
+          Learn more
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Social proof -->
+  <section class="border-y border-zinc-100 px-6 py-12">
+    <p class="text-center text-sm uppercase tracking-wider text-zinc-500">
+      Trusted by teams at
+    </p>
+    <div class="mx-auto mt-6 flex max-w-4xl flex-wrap justify-center gap-12 text-zinc-400">
+      <span>Logo 1</span><span>Logo 2</span><span>Logo 3</span><span>Logo 4</span>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="px-6 py-20">
+    <div class="mx-auto max-w-5xl">
+      <h2 class="text-3xl font-bold tracking-tight">What you get</h2>
+      <div class="mt-10 grid gap-8 sm:grid-cols-3">
+        {[
+          { title: "Feature one", body: "What it does, in plain language." },
+          { title: "Feature two", body: "What it does, in plain language." },
+          { title: "Feature three", body: "What it does, in plain language." },
+        ].map((f) => (
+          <div>
+            <h3 class="text-lg font-semibold">{f.title}</h3>
+            <p class="mt-2 text-zinc-600">{f.body}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="bg-zinc-50 px-6 py-20">
+    <div class="mx-auto max-w-3xl">
+      <h2 class="text-3xl font-bold tracking-tight">FAQ</h2>
+      <dl class="mt-10 space-y-6">
+        <div>
+          <dt class="font-semibold">Common question one?</dt>
+          <dd class="mt-1 text-zinc-600">Answer in one or two sentences.</dd>
+        </div>
+        <div>
+          <dt class="font-semibold">Common question two?</dt>
+          <dd class="mt-1 text-zinc-600">Answer in one or two sentences.</dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section id="cta" class="px-6 py-24">
+    <div class="mx-auto max-w-2xl text-center">
+      <h2 class="text-3xl font-bold tracking-tight">Ready to start?</h2>
+      <p class="mt-3 text-zinc-600">One sentence that frames the next step.</p>
+      <a
+        href="https://example.com/signup"
+        class="mt-8 inline-block rounded-md bg-zinc-900 px-8 py-4 text-lg font-medium text-white shadow-sm hover:bg-zinc-800 transition"
+      >
+        Get started
+      </a>
+    </div>
+  </section>
+
+  <footer class="border-t border-zinc-100 px-6 py-8 text-center text-sm text-zinc-500">
+    <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · © {new Date().getFullYear()}
+  </footer>
+</Base>

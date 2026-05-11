@@ -1,0 +1,12 @@
+{
+  "slug": "<slug>",
+  "brief": "<one-line summary>",
+  "team": "<roster file used>",
+  "phase": "1",
+  "phase_status": "pending",
+  "audience": "<primary persona description>",
+  "started": "<ISO-8601>",
+  "updated": "<ISO-8601>",
+  "blockers": [],
+  "history": []
+}

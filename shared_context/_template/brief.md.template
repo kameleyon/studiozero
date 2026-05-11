@@ -1,0 +1,32 @@
+---
+agent: bigbrain
+phase: 0
+produced: <ISO-8601>
+status: final
+consumes: []
+---
+
+# Project Brief — <slug>
+
+## What Jo asked for (verbatim)
+
+<paste Jo's original request, vibes and all>
+
+## BigBrain's translation
+
+**Target audience (primary):** <persona>
+**Target audience (secondary, if any):** <persona>
+**Core outcome:** <single sentence>
+**Success criteria:** <how we'll know it worked>
+**Risk profile:** consumer | regulated | internal | mixed
+**Deadline:** <date or "no hard deadline">
+**Out of scope:** <what we are explicitly NOT building>
+
+## Team chosen
+
+**Roster:** `teams/<name>.md`
+**Reason:** <why this team fits the brief>
+
+## Open questions
+
+<anything that needs Jo's confirmation before Phase 1 starts>

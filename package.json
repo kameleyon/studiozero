@@ -1,0 +1,1 @@
+{"name":"studiozero","type":"module","scripts":{"start":"node runner.js","dependencies":{"node-fetch":"^3.3.2"}},"devDependencies":{"@types/node":"^25.6.0","node-fetch":"^3.3.2","tsx":"^4.21.0","typescript":"^6.0.3","dependencies":{"node-fetch":"^3.3.2"}},"dependencies":{"node-fetch":"^3.3.2"}}

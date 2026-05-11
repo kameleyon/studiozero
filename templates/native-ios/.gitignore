@@ -1,0 +1,11 @@
+.build
+.swiftpm
+.netrc
+DerivedData
+*.xcodeproj
+*.xcworkspace
+xcuserdata
+*.ipa
+*.app
+*.dSYM.zip
+.DS_Store
