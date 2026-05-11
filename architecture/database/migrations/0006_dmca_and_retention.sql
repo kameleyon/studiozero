@@ -1,0 +1,27 @@
+-- ============================================================================
+-- 0006_dmca_and_retention.sql  (STUB — delivered by M5)
+-- ============================================================================
+-- Milestone: M5 — Public launch (PRD §16)
+-- Owner:     Atlas + Comply + Watch
+-- Gate:      All M4 gates remain green; DMCA Designated Agent registered
+--            (compliance/dmca-agent.pdf in HEAD); ≥4 GTM channels active
+--            (marketing/launch-checklist.md).
+--
+-- What ships here:
+--   - dmca_takedowns table: notice → review → action → response, with
+--     audit_logs cross-link via action='dmca_takedown_received' /
+--     'dmca_takedown_resolved'.
+--   - audit_logs LIST partitioning by year (audit_logs_2026, …) so the 7-year
+--     retention scan stays performant; partitioning is delayed until M5 because
+--     premature partitioning slows M0-M4 dev cycles.
+--   - data_exports 90-day pg_cron purge (per settings-and-account-management.md
+--     EC-6).
+--   - breach_events MFA-gated admin RPC hardening (TODO: per Shield STRIDE I-3
+--     when threat model lands).
+--
+-- Rollback: detach partitions; drop dmca_takedowns. audit_logs base table
+-- continues to hold prior years' data in its base partition until repartitioned.
+-- ============================================================================
+
+-- TODO: M5 — DMCA takedowns + audit_logs partitioning + 90d data_exports purge.
+SELECT 'M5 placeholder: see PRD §14.5 DMCA + §14.4 retention table' AS status;

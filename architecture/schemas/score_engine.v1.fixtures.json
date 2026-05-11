@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://studio-zero.dev/schemas/score_engine.v1.fixtures.json",
+  "title": "Score Engine v1 — canonical contract-test fixtures",
+  "description": "Closes Verify Blocker B1. Every row is a contract-test input/output pair for the score-engine implementation. PR-blocking test `pnpm test score-engine` asserts `score_v1(input) === expected_output` for every row, AND that the verdict-rule priority order matches PRD §10 (Blocker override evaluated before score-band). Formula: `score = max(0, round_half_even(100 - Σ weights[severity]))`. Weights: Blocker 30, Critical 18, Major 7, Minor 2, Polish 0.5. Thresholds: fail_below=70, pass_with_fixes_min=70, pass_with_fixes_max=94, pass_min=95. Rounding: half-to-even (banker's).",
+  "engine_version": "v1",
+  "schema_under_test": "score_engine.v1.json",
+  "rows": [
+    {
+      "id": "SE-R01",
+      "label": "empty findings → 100 / PASS (perfect ceiling)",
+      "findings_input": [],
+      "expected_breakdown": {
+        "deduction_total": 0,
+        "raw_score_pre_round": 100,
+        "raw_score_post_round": 100,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_gte_pass_min"
+      },
+      "expected_output": { "score": 100, "verdict": "PASS" }
+    },
+    {
+      "id": "SE-R02",
+      "label": "one Blocker → math 70, verdict FAIL by Blocker override (priority 1)",
+      "findings_input": [{ "severity": "Blocker" }],
+      "expected_breakdown": {
+        "deduction_total": 30,
+        "raw_score_pre_round": 70,
+        "raw_score_post_round": 70,
+        "clamped": false,
+        "any_blocker": true,
+        "verdict_rule_triggered": "any_blocker",
+        "notes": "Score is computed normally (70). The verdict-rule priority list evaluates `any_blocker` FIRST, so verdict is FAIL even though score would otherwise qualify for PASS WITH FIXES. PRD §10 verdict rule."
+      },
+      "expected_output": { "score": 70, "verdict": "FAIL" }
+    },
+    {
+      "id": "SE-R03",
+      "label": "four Blockers → score clamped to 0 by score_floor, verdict FAIL",
+      "findings_input": [
+        { "severity": "Blocker" },
+        { "severity": "Blocker" },
+        { "severity": "Blocker" },
+        { "severity": "Blocker" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 120,
+        "raw_score_pre_round": -20,
+        "raw_score_post_round": -20,
+        "clamped": true,
+        "any_blocker": true,
+        "verdict_rule_triggered": "any_blocker",
+        "notes": "max(0, -20) = 0. score_floor clamp activated. Verdict FAIL on Blocker override."
+      },
+      "expected_output": { "score": 0, "verdict": "FAIL" }
+    },
+    {
+      "id": "SE-R04",
+      "label": "three Majors → 79 / PASS WITH FIXES",
+      "findings_input": [
+        { "severity": "Major" },
+        { "severity": "Major" },
+        { "severity": "Major" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 21,
+        "raw_score_pre_round": 79,
+        "raw_score_post_round": 79,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_in_pass_with_fixes_band",
+        "notes": "3 × 7 = 21. 100 − 21 = 79. Falls in [70, 94] band."
+      },
+      "expected_output": { "score": 79, "verdict": "PASS WITH FIXES" }
+    },
+    {
+      "id": "SE-R05",
+      "label": "one Major + ten Polish → 88 / PASS WITH FIXES",
+      "findings_input": [
+        { "severity": "Major" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 12,
+        "raw_score_pre_round": 88,
+        "raw_score_post_round": 88,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_in_pass_with_fixes_band",
+        "notes": "1×7 + 10×0.5 = 7 + 5 = 12. 100 − 12 = 88. Integer; no rounding needed."
+      },
+      "expected_output": { "score": 88, "verdict": "PASS WITH FIXES" }
+    },
+    {
+      "id": "SE-R06",
+      "label": "eleven Polish only → 94.5 → round_half_even → 94 / PASS WITH FIXES (half-even at boundary)",
+      "findings_input": [
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 5.5,
+        "raw_score_pre_round": 94.5,
+        "raw_score_post_round": 94,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_in_pass_with_fixes_band",
+        "notes": "11 × 0.5 = 5.5. 100 − 5.5 = 94.5. round_half_to_even(94.5): tie between 94 (even) and 95 (odd); rounds to 94. PRD §10 anchor row — this is the case the rounding-mode lock was written for."
+      },
+      "expected_output": { "score": 94, "verdict": "PASS WITH FIXES" }
+    },
+    {
+      "id": "SE-R07",
+      "label": "twelve Polish → 94 / PASS WITH FIXES (no rounding ambiguity)",
+      "findings_input": [
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 6,
+        "raw_score_pre_round": 94,
+        "raw_score_post_round": 94,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_in_pass_with_fixes_band",
+        "notes": "12 × 0.5 = 6. 100 − 6 = 94. Same outcome as R06 by different math — confirms the rounding mode doesn't accidentally flip integer inputs."
+      },
+      "expected_output": { "score": 94, "verdict": "PASS WITH FIXES" }
+    },
+    {
+      "id": "SE-R08",
+      "label": "exact threshold 69 → FAIL (score_lt_fail_below; NO Blocker present)",
+      "findings_input": [
+        { "severity": "Critical" },
+        { "severity": "Major" },
+        { "severity": "Minor" },
+        { "severity": "Minor" },
+        { "severity": "Minor" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 31,
+        "raw_score_pre_round": 69,
+        "raw_score_post_round": 69,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_lt_fail_below",
+        "notes": "18 + 7 + 2 + 2 + 2 = 31. 100 − 31 = 69. NO Blocker — proves the score-band rule fires at 69 < fail_below=70 even without Blocker override."
+      },
+      "expected_output": { "score": 69, "verdict": "FAIL" }
+    },
+    {
+      "id": "SE-R09",
+      "label": "exact threshold 70 → PASS WITH FIXES (lower band edge; NO Blocker)",
+      "findings_input": [
+        { "severity": "Critical" },
+        { "severity": "Major" },
+        { "severity": "Minor" },
+        { "severity": "Minor" },
+        { "severity": "Polish" },
+        { "severity": "Polish" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 30,
+        "raw_score_pre_round": 70,
+        "raw_score_post_round": 70,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_in_pass_with_fixes_band",
+        "notes": "18 + 7 + 2 + 2 + 0.5 + 0.5 = 30. 100 − 30 = 70. Edge-of-band on the lower side. Verifies the inclusive-min boundary."
+      },
+      "expected_output": { "score": 70, "verdict": "PASS WITH FIXES" }
+    },
+    {
+      "id": "SE-R10",
+      "label": "exact threshold 94 → PASS WITH FIXES (upper band edge)",
+      "findings_input": [
+        { "severity": "Minor" },
+        { "severity": "Minor" },
+        { "severity": "Minor" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 6,
+        "raw_score_pre_round": 94,
+        "raw_score_post_round": 94,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_in_pass_with_fixes_band",
+        "notes": "3 × 2 = 6. 100 − 6 = 94. Edge-of-band on the upper side. Verifies the inclusive-max boundary."
+      },
+      "expected_output": { "score": 94, "verdict": "PASS WITH FIXES" }
+    },
+    {
+      "id": "SE-R11",
+      "label": "exact threshold 95 → PASS (lower edge of PASS band)",
+      "findings_input": [
+        { "severity": "Minor" },
+        { "severity": "Polish" },
+        { "severity": "Polish" },
+        { "severity": "Polish" },
+        { "severity": "Polish" },
+        { "severity": "Polish" },
+        { "severity": "Polish" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 5,
+        "raw_score_pre_round": 95,
+        "raw_score_post_round": 95,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_gte_pass_min",
+        "notes": "1×2 + 6×0.5 = 2 + 3 = 5. 100 − 5 = 95. Edge-of-PASS. The math also enforces 'no Major and no Critical' automatically — 1 Major would be a 7 deduction → 93 < 95."
+      },
+      "expected_output": { "score": 95, "verdict": "PASS" }
+    },
+    {
+      "id": "SE-R12",
+      "label": "half-to-even at 95.5 (nine Polish) → 96 / PASS (ties to even 96, not odd 95)",
+      "findings_input": [
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 4.5,
+        "raw_score_pre_round": 95.5,
+        "raw_score_post_round": 96,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_gte_pass_min",
+        "notes": "9 × 0.5 = 4.5. 100 − 4.5 = 95.5. round_half_to_even(95.5): tie between 95 (odd) and 96 (even); rounds to 96. Demonstrates the OPPOSITE direction of R06 — half-even is the only rounding mode that preserves symmetry here."
+      },
+      "expected_output": { "score": 96, "verdict": "PASS" }
+    },
+    {
+      "id": "SE-R13",
+      "label": "half-to-even at 93.5 (thirteen Polish) → 94 / PASS WITH FIXES",
+      "findings_input": [
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 6.5,
+        "raw_score_pre_round": 93.5,
+        "raw_score_post_round": 94,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_in_pass_with_fixes_band",
+        "notes": "13 × 0.5 = 6.5. 100 − 6.5 = 93.5. round_half_to_even(93.5): tie between 93 (odd) and 94 (even); rounds to 94. Lands inside PASS WITH FIXES band."
+      },
+      "expected_output": { "score": 94, "verdict": "PASS WITH FIXES" }
+    },
+    {
+      "id": "SE-R14",
+      "label": "one Critical alone → 82 / PASS WITH FIXES",
+      "findings_input": [{ "severity": "Critical" }],
+      "expected_breakdown": {
+        "deduction_total": 18,
+        "raw_score_pre_round": 82,
+        "raw_score_post_round": 82,
+        "clamped": false,
+        "any_blocker": false,
+        "verdict_rule_triggered": "score_in_pass_with_fixes_band",
+        "notes": "1 × 18 = 18. 100 − 18 = 82. Single-finding sanity row covering the Critical weight."
+      },
+      "expected_output": { "score": 82, "verdict": "PASS WITH FIXES" }
+    },
+    {
+      "id": "SE-R15",
+      "label": "one Blocker + five Polish → 67.5 → 68 / FAIL (Blocker AND below threshold)",
+      "findings_input": [
+        { "severity": "Blocker" },
+        { "severity": "Polish" }, { "severity": "Polish" }, { "severity": "Polish" },
+        { "severity": "Polish" }, { "severity": "Polish" }
+      ],
+      "expected_breakdown": {
+        "deduction_total": 32.5,
+        "raw_score_pre_round": 67.5,
+        "raw_score_post_round": 68,
+        "clamped": false,
+        "any_blocker": true,
+        "verdict_rule_triggered": "any_blocker",
+        "notes": "1×30 + 5×0.5 = 30 + 2.5 = 32.5. 100 − 32.5 = 67.5. round_half_to_even(67.5): tie between 67 (odd) and 68 (even); rounds to 68. Verdict triggered by Blocker override (priority 1) — score-band rule (priority 2) WOULD have also triggered FAIL since 68 < 70, but the priority ordering means the rule that fires is `any_blocker`. This row asserts the rule-precedence ordering, not just the outcome."
+      },
+      "expected_output": { "score": 68, "verdict": "FAIL" }
+    }
+  ]
+}

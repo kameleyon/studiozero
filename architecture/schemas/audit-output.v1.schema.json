@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://studio-zero.dev/schemas/audit-output.v1.schema.json",
+  "title": "Studio Zero Audit Output v1",
+  "description": "Stable contract for every audit run's terminal output. Produced by Jury synthesis at the `verdict_emitted` state of the run state machine (ia/user-flows/audit-run-state-machine.md). Consumed by the web app, score engine, score_snapshots persistence, share view at /v/<short-id>, and the verdict-card component. PRD §9.4. Rounding mode and verdict thresholds are owned by score_engine.v1.json — this schema only constrains shape and integrity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verdict",
+    "score",
+    "score_engine_version",
+    "audience",
+    "watermark",
+    "findings",
+    "score_breakdown"
+  ],
+  "properties": {
+    "verdict": {
+      "description": "Terminal verdict per PRD §10. Renders as the verdict-card <h1 role=\"status\"> text. Halo HC1: never communicated by color alone — text + icon + color triple.",
+      "type": "string",
+      "enum": ["PASS", "PASS WITH FIXES", "FAIL"]
+    },
+    "score": {
+      "description": "Deterministic readiness score per PRD §10 formula `max(0, round_half_even(100 - Σ severity_weight[finding.severity]))`. Integer 0..100 after rounding. Reproducible from `findings` + the `score_engine_version` referenced — re-running the score engine on the same findings array MUST yield this exact integer.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "score_engine_version": {
+      "description": "Pinned score engine version that produced `score` and the verdict thresholds. Never edited in place — new rubric = new version (v2, v3…). Persisted to score_snapshots row alongside the integer score so re-audits across version boundaries can be compared apples-to-apples via the analytics-emitted v1_equivalent_score column (closes Atlas v0.2 Critical 1).",
+      "type": "string",
+      "pattern": "^v[0-9]+$"
+    },
+    "audience": {
+      "description": "Free-text audience label captured at intake (PRD §5 personas) and echoed back so the verdict card subhead and share-view social card render the same audience phrasing.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 280
+    },
+    "watermark": {
+      "description": "PRD §17 D7. `\"private-run-self-audited\"` when the run was produced by a local (CLI-mode) runner; `null` for hosted-runner BYOK + Managed. The verdict-card renders the Private Run · Self-Audited chip + aria-describedby help-text iff this is non-null.",
+      "type": ["string", "null"],
+      "enum": ["private-run-self-audited", null]
+    },
+    "findings": {
+      "description": "Every issue discovered by the audit, ordered most-severe first. Empty array is permitted (PASS at 100).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "score_breakdown": {
+      "description": "Per-category 0..100 sub-scores. Computed from findings tagged with the matching reviewer (PRD §10 + §9.4). Powers the radar chart + semantic <table> on verdict-card (Halo HC3 — SC 1.1.1, SC 1.3.1, SC 1.4.11).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ux", "accessibility", "copy", "brand", "flow", "audience"],
+      "properties": {
+        "ux":            { "type": "integer", "minimum": 0, "maximum": 100, "description": "Optic-tagged findings only" },
+        "accessibility": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Halo-tagged findings only" },
+        "copy":          { "type": "integer", "minimum": 0, "maximum": 100, "description": "Proof-tagged findings only" },
+        "brand":         { "type": "integer", "minimum": 0, "maximum": 100, "description": "Canon-tagged findings only" },
+        "flow":          { "type": "integer", "minimum": 0, "maximum": 100, "description": "Trace-tagged findings only" },
+        "audience":      { "type": "integer", "minimum": 0, "maximum": 100, "description": "Compass-tagged findings only" }
+      }
+    },
+    "partial": {
+      "description": "Optional. `true` when this verdict was emitted by the `partial_completed` terminal state (audit-run-state-machine.md). Excluded from the §15 first-audit-FAIL-rate SLI denominator. Absent or false on a complete run.",
+      "type": "boolean"
+    },
+    "run_id": {
+      "description": "Optional. Stable ULID of the run that produced this output. Echoed for share-view + verdict-card support-context surface. When absent, the wrapping runs row is the authority.",
+      "type": "string",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "generated_at": {
+      "description": "Optional. RFC 3339 timestamp of Jury synthesis completion. Distinct from runs.completed_at which is set by the DB row update; this is the runner's witness.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "score_engine_provenance": {
+      "description": "Optional but recommended. Cryptographic provenance of the score engine that produced the score: sha256 of the score_engine.v<n>.json file embedded in the runner binary at build time. Lets re-audits prove the rubric hasn't drifted unilaterally.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256"],
+      "properties": {
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "reviewer",
+        "severity",
+        "layer",
+        "summary",
+        "evidence",
+        "recommendation",
+        "estimated_effort"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stable per-run finding id. Format `F-NNN` zero-padded to 3+ digits. Referenced by score_snapshots.finding_ids and by the Auto-PR commit trailer at V1.5 (PRD §11.2).",
+          "type": "string",
+          "pattern": "^F-[0-9]{3,}$"
+        },
+        "reviewer": {
+          "description": "Which audit-layer agent produced this finding. Drives score_breakdown bucketing and the verdict-card filter-by-reviewer affordance.",
+          "type": "string",
+          "enum": ["jury", "optic", "proof", "halo", "compass", "trace", "canon"]
+        },
+        "severity": {
+          "description": "Strict-elite rubric per PRD §10. Weights live in score_engine.v1.json — never duplicate them in the runner.",
+          "type": "string",
+          "enum": ["Blocker", "Critical", "Major", "Minor", "Polish"]
+        },
+        "layer": {
+          "description": "Which system-architecture layer the finding lives in. Used by the FindingsList group-by-file/layer affordance.",
+          "type": "string",
+          "enum": [
+            "frontend",
+            "backend",
+            "data",
+            "infra",
+            "security",
+            "design",
+            "copy",
+            "brand",
+            "flow",
+            "audience",
+            "accessibility",
+            "compliance"
+          ]
+        },
+        "summary": {
+          "description": "One-line human-readable summary. Renders as the finding row title in the verdict-card FindingsList.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280
+        },
+        "evidence": { "$ref": "#/$defs/evidence" },
+        "recommendation": {
+          "description": "Fix prose + code snippet. MVP tier ships specs-only (PRD §11.1); V1.5 Auto-PR consumes this field to compose commits.",
+          "type": "string",
+          "minLength": 1
+        },
+        "estimated_effort": {
+          "description": "T-shirt sizing. Drives the V1.5 Auto-PR tier pricing (D5 — open). Also surfaces on the FindingsList sort affordance.",
+          "type": "string",
+          "enum": ["S", "M", "L"]
+        },
+        "wcag_sc": {
+          "description": "Optional. Only valid when reviewer = 'halo'. WCAG 2.2 success criterion(s) cited, e.g. ['1.1.1', '2.5.8']. Renders on the evidence viewer.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+          "uniqueItems": true
+        },
+        "ai_disclosure": {
+          "description": "EU AI Act Art. 50 disclosure for AI-authored recommendation snippets that the customer may publish (PRD §11.3). Header `X-AI-Generated: studio-zero` is emitted at HTTP layer; this object captures the per-finding provenance.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["generated_by", "model_class"],
+          "properties": {
+            "generated_by": { "type": "string", "enum": ["studio-zero/runner"] },
+            "model_class":  { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "description": "Proof material for the finding. Discriminated on `type`. Screenshot evidence MUST carry `alt` (Halo HC4 — SC 1.1.1). Transcripts MUST be rendered as semantic DOM text by the consumer (SC 1.4.5) — this schema enforces shape, the UI enforces rendering.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["file", "url", "screenshot", "transcript"]
+        }
+      },
+      "oneOf": [
+        {
+          "title": "file evidence",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "path"],
+          "properties": {
+            "type": { "const": "file" },
+            "path": {
+              "description": "Repo-relative POSIX path. Never an absolute path — leaks runner FS layout.",
+              "type": "string",
+              "pattern": "^(?!/)(?!.*\\.\\./).+$",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "line_start": { "type": "integer", "minimum": 1 },
+            "line_end":   { "type": "integer", "minimum": 1 },
+            "snippet":    {
+              "description": "Inline code excerpt. Per Atlas v0.2 Minor (5KB boundary): if the snippet exceeds 5120 bytes, the runner MUST instead use a storage_path reference (see object-evidence variant below) to avoid table bloat in findings.evidence JSONB.",
+              "type": "string",
+              "maxLength": 5120
+            }
+          }
+        },
+        {
+          "title": "url evidence",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "url"],
+          "properties": {
+            "type": { "const": "url" },
+            "url":  { "type": "string", "format": "uri", "minLength": 1, "maxLength": 2048 },
+            "viewport_w": { "type": "integer", "minimum": 1, "maximum": 8192 },
+            "viewport_h": { "type": "integer", "minimum": 1, "maximum": 8192 },
+            "captured_at": { "type": "string", "format": "date-time" }
+          }
+        },
+        {
+          "title": "screenshot evidence (alt REQUIRED per Halo HC4 / SC 1.1.1)",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "storage_path", "alt"],
+          "properties": {
+            "type": { "const": "screenshot" },
+            "storage_path": {
+              "description": "Supabase Storage object key under the per-tenant evidence bucket. Never a public URL — viewer mints a short-lived signed URL.",
+              "type": "string",
+              "pattern": "^evidence/[0-9a-f-]{36}/[A-Za-z0-9._/-]+$",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "alt": {
+              "description": "REQUIRED. Halo HC4 — WCAG SC 1.1.1 Non-text Content. Describes the screenshot's meaningful content for assistive tech and the verdict-card share view. Must not be empty even if the screenshot is decorative; if truly decorative, do not ship it as evidence.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "viewport_w": { "type": "integer", "minimum": 1, "maximum": 8192 },
+            "viewport_h": { "type": "integer", "minimum": 1, "maximum": 8192 },
+            "wcag_sc": {
+              "description": "WCAG 2.2 SC(s) the screenshot evidences, e.g. SC 1.4.3 (contrast), SC 2.5.8 (target size 24×24 CSS px).",
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+              "uniqueItems": true
+            }
+          }
+        },
+        {
+          "title": "transcript evidence (must render as semantic DOM, SC 1.4.5)",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "transcript"],
+          "properties": {
+            "type": { "const": "transcript" },
+            "transcript": {
+              "description": "Screen-reader or other transcript content. UI surface MUST render as semantic DOM text (Halo HC4) — never as opaque JSON in a <code> block.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 16384
+            },
+            "source": {
+              "type": "string",
+              "enum": ["nvda", "voiceover", "talkback", "jaws", "axe-core", "custom"]
+            },
+            "captured_at": { "type": "string", "format": "date-time" }
+          }
+        }
+      ]
+    }
+  }
+}

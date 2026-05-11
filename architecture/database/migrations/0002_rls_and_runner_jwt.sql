@@ -1,0 +1,32 @@
+-- ============================================================================
+-- 0002_rls_and_runner_jwt.sql  (STUB — delivered by M1)
+-- ============================================================================
+-- Milestone: M1 — Audit MVP (BYOK only) (PRD §16)
+-- Owner:     Atlas + Vault + Shield
+-- Gate:      RLS cross-tenant + SSRF + redaction + path-traversal fuzz suite
+--            green (PRD §16 M1 exit gate); integration/rls-cross-tenant.spec.ts
+--            green; mint Edge Function deployed and audit-trail row written
+--            per call (closes Atlas v0.2 Blocker B2).
+--
+-- What ships here:
+--   - auth.tenant_id(), auth.runner_run_id(), auth.claim_role(),
+--     auth.is_member_of() helper functions (per rls-policies.sql header).
+--   - ENABLE + FORCE ROW LEVEL SECURITY on every tenant-scoped table.
+--   - All policies from rls-policies.sql, including the runner-role policies
+--     that match auth.tenant_id() and auth.runner_run_id() at the engine.
+--   - audit_log_write() SECURITY DEFINER function, grants tightened.
+--   - mint-runner-token Edge Function deployment hook (out-of-band Supabase
+--     deploy; this migration records the function-version-pinned URL in a
+--     config row in score_engine_versions-adjacent runtime_config table).
+--
+-- Rollback: drop policies; disable RLS; drop helper functions. Same forward-
+--           only discipline as 0001 — once shipped, supersede via 0003+.
+--
+-- Placeholder — the full SQL body lives at architecture/database/
+-- rls-policies.sql and will be inlined here by Atlas at M1 with the mint
+-- function deployment hook appended.
+-- ============================================================================
+
+-- TODO: M1 — copy rls-policies.sql contents wrapped in BEGIN/COMMIT and append
+-- the runtime_config row that pins the mint Edge Function URL + jwt_secret_id.
+SELECT 'M1 placeholder: see architecture/database/rls-policies.sql + runner-jwt.md' AS status;

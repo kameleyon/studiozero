@@ -1,0 +1,25 @@
+-- ============================================================================
+-- 0003_billing_managed.sql  (STUB — delivered by M2)
+-- ============================================================================
+-- Milestone: M2 — Managed mode + billing (PRD §16; D6 reorder Managed-before-CLI)
+-- Owner:     Atlas + Ledger + Comply
+-- Gate:      Stripe idempotency tests green (billing-and-cancel.md Unhappy 4);
+--            GDPR Art. 28 DPA published (PRD §17 #17); D20 regional refund
+--            matrix wired (billing-and-cancel.md happy + EC paths green);
+--            D22 cooling-off-resets-per-upgrade row count goes up on upgrade.
+--
+-- What ships here:
+--   - disputes table for B-DISPUTE flow (billing-and-cancel.md).
+--   - Stripe webhook replay-queue table with SELECT … FOR UPDATE SKIP LOCKED
+--     so duplicate-delivery + outage-replay are idempotent.
+--   - Trigger on subscriptions INSERT/UPDATE that opens cooling_off_windows
+--     for region ∈ {eu, uk} on subscribe AND on upgrade events (D20 + D22).
+--   - subscriptions plan-change trigger that drives the D22 fresh-window
+--     row in cooling_off_windows; the trigger logic is the encoding of D22,
+--     not the table shape.
+--
+-- Rollback: drop new tables + triggers. Subscriptions table stays.
+-- ============================================================================
+
+-- TODO: M2 — implement disputes, replay queue, cooling-off triggers.
+SELECT 'M2 placeholder: see ia/user-flows/billing-and-cancel.md + PRD §17 D20 / D22' AS status;

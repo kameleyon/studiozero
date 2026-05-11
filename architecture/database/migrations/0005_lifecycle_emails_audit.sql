@@ -1,0 +1,27 @@
+-- ============================================================================
+-- 0005_lifecycle_emails_audit.sql  (STUB — delivered by M4)
+-- ============================================================================
+-- Milestone: M4 — Lifecycle + Polish (PRD §16)
+-- Owner:     Atlas + Herald + Pipeline
+-- Gate:      E1–E5 trigger correctness verified end-to-end; WCAG 2.2 AA
+--            third-party conformance audit passed (PRD §16 M4 gate).
+--
+-- What ships here:
+--   - pg_cron extension enabled (Supabase-native).
+--   - Lifecycle-email scheduler rows:
+--       E1 on signup confirm → 0min delay → "first audit" CTA
+--       E2 on runs.verdict='FAIL' AND runs.product='surface' → 24h delay
+--       E3 on runs.verdict='PASS WITH FIXES' → 48h delay
+--       E4 on T-3 days before 30-day re-audit window expiry
+--       E5 day-60 inactive after FAIL → win-back
+--   - audit_log_write() callable from app layer (not service-role only); grants
+--     tightened with role-scoped check to prevent cross-tenant writes.
+--   - retention pg_cron job: nightly purge_expired_runs() that cryptoshreds
+--     runs whose archive_after < now() (closes Atlas v0.2 Major #1 on §14.4).
+--
+-- Rollback: drop cron rows; drop new functions. audit_log_write() reverts to
+-- service-role-only.
+-- ============================================================================
+
+-- TODO: M4 — pg_cron + lifecycle scheduler + retention purge_expired_runs().
+SELECT 'M4 placeholder: see PRD §6.3 E1–E5 + §14.4 retention table' AS status;

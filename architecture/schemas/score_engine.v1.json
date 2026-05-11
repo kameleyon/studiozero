@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://studio-zero.dev/schemas/score_engine.v1.json",
+  "title": "Studio Zero Score Engine v1",
+  "description": "Deterministic readiness-score parameters per PRD §10 (Strict elite gate, locked v0.2; rounding locked v0.4). Versioned: any change to weights, thresholds, or rounding mode is a new version file (score_engine.v2.json), never an in-place edit. Persisted to score_snapshots.score_engine_version on every snapshot so re-audits are mathematically comparable across time. The score formula is `score = max(0, round_half_even(100 - Σ weights[finding.severity]))`. The verdict rule is documented in `verdict_rule` below — keyed off Blocker-presence first, then score-band thresholds.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "weights",
+    "thresholds",
+    "rounding",
+    "starting_score",
+    "score_floor",
+    "verdict_rule"
+  ],
+  "properties": {
+    "version": {
+      "description": "Engine version stamp. Echoed onto every audit-output.v1.score_engine_version and persisted to score_snapshots.score_engine_version.",
+      "type": "string",
+      "const": "v1"
+    },
+    "weights": {
+      "description": "Per-severity point deductions. Sum across all findings, subtract from starting_score, then round_half_even.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Blocker", "Critical", "Major", "Minor", "Polish"],
+      "properties": {
+        "Blocker":  { "type": "number", "const": 30   },
+        "Critical": { "type": "number", "const": 18   },
+        "Major":    { "type": "number", "const": 7    },
+        "Minor":    { "type": "number", "const": 2    },
+        "Polish":   { "type": "number", "const": 0.5  }
+      }
+    },
+    "thresholds": {
+      "description": "Score-band thresholds. Inclusive on both ends. Combined with the Blocker-override rule in `verdict_rule`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fail_below",
+        "pass_with_fixes_min",
+        "pass_with_fixes_max",
+        "pass_min"
+      ],
+      "properties": {
+        "fail_below":          { "type": "integer", "const": 70 },
+        "pass_with_fixes_min": { "type": "integer", "const": 70 },
+        "pass_with_fixes_max": { "type": "integer", "const": 94 },
+        "pass_min":            { "type": "integer", "const": 95 }
+      }
+    },
+    "rounding": {
+      "description": "Rounding mode. Locked v0.4 per Verify. `half-to-even` (banker's rounding) eliminates the Polish-decimal-sum ambiguity (e.g., 11 Polish = 5.5 deduction → 94 not 95).",
+      "type": "string",
+      "const": "half-to-even"
+    },
+    "starting_score": {
+      "description": "Starting score before deductions. 100 in v1.",
+      "type": "integer",
+      "const": 100
+    },
+    "score_floor": {
+      "description": "Lower clamp. `max(0, …)` in the PRD §10 formula corresponds to score_floor=0.",
+      "type": "integer",
+      "const": 0
+    },
+    "verdict_rule": {
+      "description": "Authoritative decision logic, in priority order. Implementations MUST evaluate in this exact order: (1) any Blocker → FAIL regardless of score; (2) score < fail_below → FAIL; (3) pass_with_fixes_min ≤ score ≤ pass_with_fixes_max → PASS WITH FIXES; (4) score ≥ pass_min → PASS.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["priority"],
+      "properties": {
+        "priority": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["when", "verdict"],
+              "properties": {
+                "when":    { "const": "any_blocker" },
+                "verdict": { "const": "FAIL" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["when", "verdict"],
+              "properties": {
+                "when":    { "const": "score_lt_fail_below" },
+                "verdict": { "const": "FAIL" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["when", "verdict"],
+              "properties": {
+                "when":    { "const": "score_in_pass_with_fixes_band" },
+                "verdict": { "const": "PASS WITH FIXES" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["when", "verdict"],
+              "properties": {
+                "when":    { "const": "score_gte_pass_min" },
+                "verdict": { "const": "PASS" }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "category_score_rule": {
+      "description": "Optional. How each `score_breakdown.<category>` 0..100 is computed. v1 = same formula as the global score but restricted to findings tagged with the matching reviewer. Documented here so the test fixtures can also assert per-category math when desired.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method":  { "type": "string", "const": "per_reviewer_subset_same_formula" },
+        "mapping": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ux", "accessibility", "copy", "brand", "flow", "audience"],
+          "properties": {
+            "ux":            { "type": "string", "const": "optic" },
+            "accessibility": { "type": "string", "const": "halo"  },
+            "copy":          { "type": "string", "const": "proof" },
+            "brand":         { "type": "string", "const": "canon" },
+            "flow":          { "type": "string", "const": "trace" },
+            "audience":      { "type": "string", "const": "compass" }
+          }
+        }
+      }
+    }
+  }
+}
