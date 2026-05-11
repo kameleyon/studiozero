@@ -37,7 +37,7 @@ These three edge cases surfaced during Phase 3 are NOT in PRD v0.4 and need to l
   - B. Keep bounded-ETA exemption but spec a 60s hard timeout in PRD §14.2 with explicit fallback verdict ("incomplete · check back later").
   - C. Allow cancel-mid-synth (loses agent partial outputs that are otherwise queued for archival).
 - **Recommendation:** A. Simplest contract; aligns with §14.2 retry semantics.
-- **Decision:** open · needs Jo + Sprint call before Phase 4.
+- **Decision:** **RESOLVED 2026-05-11 · Option A** · landed as PRD Decision #21 (v0.5). Specced in `ia/user-flows/audit-run-state-machine.md`.
 
 ### PRD-v0.5-C2 · EU 14-day cooling-off window reset on upgrade
 - **Trigger:** D20 regional refund matrix is silent on what happens when an EU customer upgrades mid-cooling-off-window. Two legal interpretations: (a) window resets on each new contract; (b) window is per-customer-relationship and doesn't reset.
@@ -45,7 +45,7 @@ These three edge cases surfaced during Phase 3 are NOT in PRD v0.4 and need to l
   - A. Customer-friendly: window resets on every upgrade. Easy to operate; modest revenue risk.
   - B. Strict: window is per-customer-relationship; upgrades do not reset.
 - **Recommendation:** A. Aligns with Studio Zero's audit-tool brand posture (transparency over revenue protection).
-- **Decision:** open · needs Comply + Ledger call before paid charges go live (M2 gate).
+- **Decision:** **RESOLVED 2026-05-11 · Option A** · landed as PRD Decision #22 (v0.5). Comply + Ledger codify in TOS before M2 launches.
 
 ### PRD-v0.5-C3 · GitHub App uninstall AFTER V1.5 PR opened
 - **Trigger:** `fix-delivery-prflow.md` EC-5. The PR persists in the customer's repo; we lose webhook visibility into merge status. D1 (GitHub App with per-repo permissions) prevents long-lived OAuth tracking.
@@ -54,7 +54,7 @@ These three edge cases surfaced during Phase 3 are NOT in PRD v0.4 and need to l
   - B. Long-lived OAuth grant for merge-status read-only — violates D1's blast-radius rationale.
   - C. Webhook deliveries via Studio Zero proxy that customer's GitHub Action posts — adds infra burden but preserves D1.
 - **Recommendation:** A for MVP; revisit at V2 if attach rate justifies C.
-- **Decision:** open · needs decision before V1.5 spec freeze.
+- **Decision:** **RESOLVED 2026-05-11 · Option A (accept stale tracking + banner)** · landed as PRD Decision #23 (v0.5). Webhook-proxy via GitHub Action revisited at V2 if Auto-PR attach rate >15%.
 
 ---
 

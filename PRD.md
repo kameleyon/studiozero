@@ -1,9 +1,9 @@
 # Studio Zero — Product Requirements Document
 
-**Version:** 0.4
-**Date:** 2026-05-10
+**Version:** 0.5
+**Date:** 2026-05-11
 **Author:** BigBrain (drafted on behalf of Jo)
-**Status:** Reviewed by 14 agents across two panels (v0.2 panel: Atlas, Axiom, Cipher, Jury, Penny, Shield, Sprint; v0.3 panel: Comply, Halo, Herald, Hook, Optic, Scout, Verify). All four FAIL-voting agents have signed off on the v0.4 plan as PASS WITH FIXES. Six decisions locked, three new decisions opened, eight new sections added, three clauses removed. Reviews in `shared_context/projects/studio-zero-productization/`.
+**Status:** Reviewed by 14 agents across two panels (v0.2 panel: Atlas, Axiom, Cipher, Jury, Penny, Shield, Sprint; v0.3 panel: Comply, Halo, Herald, Hook, Optic, Scout, Verify). Phase 2 brand-audit panel (Canon, Compass, Halo) and Phase 3 IA-audit panel (Halo, Compass) both PASS WITH FIXES. v0.5 lands three Phase-3-surfaced edge-case decisions (D21 synth stall, D22 EU cooling-off reset, D23 GH App post-PR uninstall). Reviews + decisions log in `shared_context/projects/studio-zero-productization/`.
 
 ---
 
@@ -373,6 +373,7 @@ Customer purchases the upgrade (one-time or as part of a higher subscription). T
 - A PR that does not pass re-audit is **not** opened; the customer is shown why and refunded if applicable.
 - We never push to default branches; PRs target a feature branch named `studio-zero/fix-<run-id>`.
 - Verified by §18.M5.gate-3 negative test (default-branch push attempt → blocked → audit-logged).
+- **GitHub App uninstall AFTER PR opened** (Decision D23, v0.5): PR persists in customer's repo; Studio Zero loses webhook visibility into merge status. UI shows banner *"Tracking unavailable — reinstall the Studio Zero GitHub App to resume merge status."* Stale-tracking is accepted at MVP-V1.5; webhook-proxy via GitHub Action revisited at V2 if Auto-PR attach rate justifies the infra burden.
 
 ### 11.3 Interim AI-content disclosure (M0/M1, Comply, v0.4)
 Even before Auto-PR ships, any artifact Studio Zero authors that the customer might publish (e.g., remediation snippets in findings) carries an `X-AI-Generated: studio-zero` HTTP header on API responses and an `<meta name="ai-generated" content="studio-zero">` tag in any HTML emitted. EU AI Act Art. 50 binds 2026-08-02 (~84 days from PRD date); we do not wait for V1.5 to land disclosure machinery.
@@ -479,6 +480,7 @@ Final result conforms to the contract in §9.4.
 - 99.5% availability for the web app (single region acceptable for MVP).
 - Run failures are retried up to 2x; partial results are persisted so a retry resumes rather than restarts. **Partial-result boundary:** per-reviewer (Jury composes from completed reviewers; in-flight reviewer restarts).
 - A run that fails irrecoverably refunds tokens (BYOK) or credits (Managed).
+- **Jury synthesis stall:** if `jury_synthesizing` state exceeds 30s, run is marked `failed_synth_timeout`, tokens refunded, customer offered restart with the same intake (Decision D21, v0.5). Bounded-ETA exemption from Trace's dead-end-free invariant remains for runs under 30s.
 
 ### 14.3 Security
 - OWASP Top 10 baseline for the web app (Shield agent reviews before launch).
@@ -663,7 +665,15 @@ Per `BIGBRAIN.md` Hard Rule §3 ("no silent decisions"), every cross-layer decis
 
 **#20. Regional Refund Matrix — LOCKED.** Replaces single "no refund + free re-audit" policy. EU customers: 14-day cooling-off waiver checkbox at checkout per Directive 2011/83/EU. UK: parallel CCR 2013 path. California: pro-rata refund per SB 313. FTC Click-to-Cancel (16 CFR 425) UI compliance. Dispute Finding path before chargeback escalation. Comply + Ledger codify; Forge + Vega build the regional gating; live before any paid charge.
 
-### Still open after v0.4 (need Jo's call)
+### v0.5 — Phase-3-surfaced edge cases resolved
+
+**#21. Jury synthesis stall behavior — LOCKED.** If `jury_synthesizing` exceeds 30s, run state transitions to `failed_synth_timeout`, tokens are refunded per §14.2, customer is offered restart with the same intake input. Rationale: cleanest contract; aligns with existing §14.2 retry semantics; closes Trace's dead-end-free invariant. Specced in `ia/user-flows/audit-run-state-machine.md`.
+
+**#22. EU 14-day cooling-off window resets per upgrade — LOCKED.** EU/UK customer upgrades restart a fresh 14-day cooling-off window per contract. Rationale: aligns with Studio Zero's audit-tool transparency posture (customer-friendly default); modest revenue risk acceptable given strict-elite gate already self-selects customers who understand they are paying for *receipts*, not promises. Comply + Ledger codify in TOS before M2 (Managed-tier paid charges) launches.
+
+**#23. GitHub App uninstall after Auto-PR opened — LOCKED (MVP-V1.5).** PR persists; tracking goes stale; banner notifies customer. Webhook-proxy via customer-installed GitHub Action deferred to V2 evaluation. Rationale: preserves D1 (GitHub App per-repo blast-radius reduction); honest UX; revisit if Auto-PR attach rate >15% justifies infra investment.
+
+### Still open after v0.5 (need Jo's call)
 
 - **D4** Starter pricing $19 vs $29 (Penny vs Hook+Scout+Herald)
 - **D5** Auto-PR pricing flat $49 vs tiered $15/$49/$99 (decision pushed to V1.5 spec time)
@@ -741,4 +751,4 @@ Each Goal in §4 maps to a binary acceptance test. Specified in `tests/acceptanc
 
 ---
 
-*End of PRD v0.4.*
+*End of PRD v0.5.*
