@@ -95,20 +95,23 @@
 - **Auth:** caller must present the **service-role JWT** (only the Web App's job-dispatcher code has this; never the runner itself)
 - **Input:** `{ run_id, tenant_id, ttl_seconds }`
 - **Validation:** verify (a) `runs` row exists with matching `tenant_id`, (b) state is `queued` or `dispatched`, (c) caller is service-role
-- **Output:** JWT signed with Supabase's JWT secret, claims:
+- **Output:** JWT signed with Supabase's JWT secret, claims (v0.5 Cipher Fix-3a — `aud` static, `run_id` separate claim, matching Atlas's `runner-jwt.md` shape so RLS predicates aren't doing string parsing):
   ```json
   {
-    "aud": "runner-<run_id>",
+    "sub": "worker:<hostname>",
+    "aud": "studio-zero/runner",
+    "iss": "studio-zero/mint-runner-token",
     "tenant_id": "<tenant_id>",
     "run_id": "<run_id>",
+    "role": "runner",
+    "jti": "<uuid>",
     "iat": <now>,
-    "exp": <now + ttl_seconds>,
-    "role": "authenticated"
+    "exp": <now + 300>
   }
   ```
-- **TTL:** default 300s (5 minutes); max 1800s (30 min for Comprehensive depth)
-- **Rotation:** **no refresh.** Token expires; if a reviewer needs more time, the runner heartbeat triggers a fresh mint via the Edge Function (audit-logged).
-- **Audience binding (CRITICAL):** the RLS policies on `findings`, `runs`, `score_snapshots`, `cli_pairings` MUST check `auth.jwt() ->> 'aud' = ANY(ARRAY['authenticated', 'runner-' || run_id::text])` — i.e., a runner JWT only works for the specific run it was minted for.
+- **TTL:** **300s (5 minutes), hard cap.** Long-running audits (Comprehensive depth ~45 min) refresh mid-run via a tiny `/functions/v1/refresh-runner-token` RPC that re-validates the same membership check and re-mints with the same claims. v0.5 Jury B3 + Cipher Fix-3 reconciliation: 5-min cap is the source of truth across all docs (was a 5 vs 15 vs 30 drift across Axiom/Atlas/Shield).
+- **Rotation:** **refresh-on-heartbeat.** Token expires every 5 min; the runner heartbeat at 30s intervals checks `exp - now < 60s` and calls the refresh RPC. Both mint and refresh land a row in `runner_token_mints` (audit trail). Revocation flips `runner_token_mints.revoked_at`; the RLS policy joins this and rejects revoked `jti`s immediately (closes Cipher Fix-5 — applied at M1 with the rest of the policy set).
+- **Audience binding (CRITICAL):** the RLS policies on `findings`, `runs`, `score_snapshots`, `cli_pairings` check `auth.tenant_id()` AND `auth.runner_run_id()` (helper functions extract claims). A runner JWT only works for the specific run it was minted for, in its specific tenant. No string parsing of `aud` — claims are typed columns in the JWT.
 
 **Options considered (and rejected):**
 

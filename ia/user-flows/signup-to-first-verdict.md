@@ -163,7 +163,7 @@ Every state has a forward action AND a back/cancel affordance — enumerated bel
 ### S5a — BYOK key entry + dry-run
 
 - **Renders:** API key input (HC5: `autocomplete="off"`, show/hide toggle keyboard-operable, `aria-describedby` linking purpose, paste supported, password-manager-friendly per SC 3.3.8). Help-text: "We dry-run a single call to verify the key. Studio Zero never logs the key."
-- **Forward:** "Verify & save" → background dry-run call (Anthropic `messages` endpoint, 1 token max). On success → encrypt via Supabase Vault (`pgsodium`, AES-256-GCM, tenant_id as AAD per §13.4) → S6.
+- **Forward:** "Verify & save" → background dry-run call (Anthropic `messages` endpoint, 1 token max). On success → encrypt via Supabase Vault (`pgsodium` TCE, **XChaCha20-Poly1305 AEAD** per v0.5 Cipher Fix-4, `tenant_id::text` as AAD per §13.4) → S6.
 - **Back/cancel:**
   - "Back" → S4.
   - "Skip — I'll add a key later" → S6 in restricted mode (can connect intake but cannot start a paid run).

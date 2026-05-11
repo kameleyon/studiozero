@@ -44,7 +44,7 @@
                                 │  ┌──────▼─────────┐ ┌──────────────────┐       │        │
                                 │  │ Vault          │ │ Storage          │       │        │
                                 │  │ (pgsodium      │ │  customer code,  │       │        │
-                                │  │  AES-256-GCM   │ │  evidence blobs  │       │        │
+                                │  │ XChaCha20-AEAD │ │  evidence blobs  │       │        │
                                 │  │  + AAD)        │ │  TB-3            │       │        │
                                 │  └────────────────┘ └──────────────────┘       │        │
                                 │  ┌──────────────────────────────────────────┐  │        │
@@ -58,7 +58,7 @@
                                 │  └─────┬────────────────────────────────────┘  │        │
                                 └────────┼─────────────────────────────────────────┘        │
                                          │ TB-2 (short-lived tenant-scoped JWT, ARCH-D3)    │
-                                         │  5-min TTL, audience=runner-<run_id>             │
+                                         │  5-min TTL (refresh-on-heartbeat), aud=runner    │
                                          ▼                                                  │
                             ┌──────────────────────────────┐                                │
                             │ Hosted Runner Pool           │                                │
@@ -115,7 +115,7 @@
 | Web App (Next.js 15) | Authed app shell, API routes, signup, dashboards, intake, settings (`/app/*`, `/admin/*`) | Vercel Functions (Node 20) + Server Components | us-east-1 (Vercel iad1) |
 | Supabase Postgres | Single multi-tenant DB w/ RLS. Owns `runs`, `findings`, `tenants`, `projects`, `cli_pairings`, `score_snapshots`, `billing_events`, `consent_records`, `breach_events`, `audit_logs`, plus `pg-boss` job tables | Supabase managed | us-east-1 |
 | Supabase Auth (GoTrue) | Email + Google + GitHub OAuth. Issues JWT consumed by web. (`auth.users` is the RLS exception — PRD §13.2.) | Supabase managed | us-east-1 |
-| Supabase Vault | `pgsodium` AEAD AES-256-GCM with `tenant_id` as AAD. Stores BYOK keys, GitHub App tokens, per-run code-encryption keys (cryptoshredding base) | Supabase managed | us-east-1 |
+| Supabase Vault | `pgsodium` TCE with **XChaCha20-Poly1305 AEAD** (v0.5 Cipher Fix-4 — was named "AES-256-GCM"; equivalent 256-bit AEAD security, but `pgsodium`'s actual API call is `crypto_aead_xchacha20poly1305_ietf_encrypt` with a 24-byte nonce, not AES-GCM's 12-byte) with `tenant_id::text` as AAD. Stores BYOK keys, GitHub App tokens, per-run code-encryption keys (cryptoshredding base) | Supabase managed | us-east-1 |
 | Supabase Storage | Evidence blobs (screenshots, transcripts), exported reports. RLS-scoped. | Supabase managed | us-east-1 |
 | Supabase Realtime | Per-tenant channels `runs:<run_id>`, fan-out for live progress events | Supabase managed | us-east-1 |
 | Supabase Edge Functions | Latency-sensitive or signature-verifying ops: JWT mint, BYOK dry-run, score engine, Stripe + GitHub webhooks, V1.5 Jury re-audit gate (see ARCH-D7) | Deno isolates | us-east-1 |
@@ -140,7 +140,7 @@ Every boundary where authentication or authorization changes. Shield's threat mo
 |---|---|---|---|---|
 | **TB-0** | Internet → Marketing site | none (public) | anonymous read-only | DDoS, content-scrape, supply-chain on Vercel build |
 | **TB-1** | Customer browser → Web App | Supabase Auth JWT in `sb-access-token` cookie (httpOnly, Secure, SameSite=Lax) | anonymous → authenticated user; tenant context derived from `auth.tenant_id()` SQL function | session hijack, CSRF (Next.js double-submit + Origin check), broken access control |
-| **TB-2** | Hosted Runner → Supabase Postgres | **Short-lived tenant-scoped JWT** minted at job dispatch by `mint-runner-jwt` Edge Function. TTL 5 min, audience=`runner-<run_id>`, claim `tenant_id` is fenced. (ARCH-D3, closes Atlas v0.2 B2.) | runner has DB access only to one tenant's rows; **never service-role key** | service-role-key bypass of RLS, JWT replay across runs |
+| **TB-2** | Hosted Runner → Supabase Postgres | **Short-lived tenant-scoped JWT** minted at job dispatch by `mint-runner-jwt` Edge Function. TTL 5 min (refresh-on-heartbeat via `refresh-runner-token` RPC per Atlas `runner-jwt.md`), `aud="studio-zero/runner"`, claims `tenant_id`+`run_id` are fenced. (ARCH-D3, closes Atlas v0.2 B2. v0.5 Jury B3 + Cipher Fix-3 unified.) | runner has DB access only to one tenant's rows; **never service-role key** | service-role-key bypass of RLS, JWT replay across runs |
 | **TB-3** | Web App / Runner → Supabase Vault | tenant-scoped JWT + Vault RPC call with `tenant_id` as AAD | secrets decrypt only for the calling tenant; AAD mismatch = decrypt fails | wrong-AAD decrypt, log exfil of decrypted payload |
 | **TB-4** | Hosted Runner → external internet | egress allowlist enforced at container network namespace (iptables / Cilium policy) | runner can only reach `api.anthropic.com`, own Supabase project, `api.github.com`, customer's audited URL host | SSRF, data exfil to attacker-controlled host, prompt-injection-driven exfil (D9) |
 | **TB-5** | Hosted Runner → Anthropic API | Anthropic API key (BYOK from Vault, or Managed shared key); per-tenant token budget cap enforced before request | crosses Studio Zero / Anthropic boundary | key leak via logs, token-budget bypass |
@@ -263,7 +263,7 @@ How every component identifies itself to every other.
 | Web App → GitHub App | GitHub App JWT (10-min) + installation access token (1h) | 10m / 1h | auto-refresh per Octokit | per-installation, per-repo permissions only (D1) |
 | GitHub → Web App (webhook) | HMAC signature `X-Hub-Signature-256` | n/a | webhook secret rotates per env | per-App webhook secret |
 | Web App → Anthropic | n/a (only Runner calls Anthropic) | n/a | n/a | n/a |
-| **Runner → Supabase (Postgres + Realtime + Vault)** | **Short-lived tenant-scoped JWT minted by `mint-runner-jwt` Edge Fn** | **5 min** | **minted at dispatch; one-time use** | **`aud=runner-<run_id>`; claims `tenant_id`, `run_id`** |
+| **Runner → Supabase (Postgres + Realtime + Vault)** | **Short-lived tenant-scoped JWT minted by `mint-runner-jwt` Edge Fn** | **5 min, refresh-on-heartbeat** | **minted at dispatch; refresh via `refresh-runner-token` RPC** | **`aud="studio-zero/runner"`; claims `tenant_id`, `run_id`** |
 | Runner → Anthropic | BYOK or Managed key (from Vault) | indefinite | customer-controlled (BYOK); Jo-rotated quarterly (Managed) | n/a |
 | Runner → GitHub | GitHub App installation token (1h) | 1h | minted per clone | per-installation, per-repo |
 | Runner → Sentry/PostHog | API key (env var) | indefinite | quarterly | n/a |

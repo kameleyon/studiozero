@@ -451,7 +451,7 @@ type AuditEvent =
 Final result conforms to the contract in §9.4.
 
 ### 13.4 Secret handling
-- BYOK API keys: encrypted at rest using **Supabase Vault** (`pgsodium`, AES-256-GCM AEAD) with `tenant_id` bound as Additional Authenticated Data. Decrypted only inside the runner process via a tenant-scoped Edge Function RPC. Never logged.
+- BYOK API keys: encrypted at rest using **Supabase Vault** (`pgsodium` TCE, **XChaCha20-Poly1305 AEAD** — v0.5 Cipher Fix-4; the primitive `pgsodium` actually implements; equivalent 256-bit AEAD security to AES-256-GCM but with a 24-byte nonce — Forge must call `crypto_aead_xchacha20poly1305_ietf_encrypt`, not the AES-GCM API) with `tenant_id::text` bound as Additional Authenticated Data. Decrypted only inside the runner process via a tenant-scoped Edge Function RPC. Never logged.
 - OAuth tokens (GitHub App): stored in Supabase Vault, separate access policy from BYOK keys (the web app needs to decrypt them for repo listing during onboarding; the runner needs them at clone time). GitHub App with **per-repo permissions only** (no account-wide `repo` scope) — locked v0.4 per Decision D1.
 - Customer code (in BYOK and Managed modes): cryptoshredded — encrypted with a per-run key stored in Vault; key deleted at retention expiry so backups become mathematically destroyed simultaneously. Default retention 7 days, customer-overridable to 0–30 (see §14.4 retention table).
 - CLI mode customer code: never leaves the customer's machine.
@@ -629,7 +629,7 @@ Per `BIGBRAIN.md` Hard Rule §3 ("no silent decisions"), every cross-layer decis
 ### Locked v0.3 (carried)
 
 11. **Audit *level* renamed to audit *depth*; "Layered" → "Custom"; "Full" → "Comprehensive".**
-12. **Supabase Vault (`pgsodium`, AES-256-GCM AEAD) replaces `libsodium sealed boxes`.**
+12. **Supabase Vault (`pgsodium` TCE, XChaCha20-Poly1305 AEAD per v0.5 Cipher Fix-4) replaces `libsodium sealed boxes`.**
 13. **§15 success metrics rewritten** for Strict-elite weights.
 14. **`auth.users` is the explicit RLS exception** in §13.2.
 15. **§4 / §7 scrubbed of GitLab references** for MVP.

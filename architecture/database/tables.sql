@@ -108,8 +108,16 @@ CREATE TYPE consent_kind AS ENUM (
 
 CREATE TYPE fix_pr_state AS ENUM (
   'queued', 'building', 'reaudit_running', 'reaudit_failed',
+  -- v0.5 Jury B2 fix: explicit terminal-gating state between re-audit pass
+  -- and PR open. PRD §11.2 hard rule: PR that fails re-audit is NOT opened.
+  -- 'reaudit_passed' is the load-bearing state Axiom ARCH-D7 gates on.
+  'reaudit_passed',
   'pr_opened', 'pr_merged', 'pr_closed_unmerged', 'failed'
 );
+
+-- v0.5 Jury B1 + Axiom ARCH-D6 + PRD D23: stale-tracking state when GitHub App
+-- is uninstalled after a run/PR. Drives the "Tracking unavailable" banner UX.
+CREATE TYPE pr_tracking_state AS ENUM ('active', 'stale', 'recovered');
 
 CREATE TYPE audit_action AS ENUM (
   -- Append-only ledger of human / system actions for SOC2 / GDPR / DMCA.
@@ -129,6 +137,7 @@ CREATE TYPE audit_action AS ENUM (
   'account_deletion_cancelled',
   'account_deletion_executed',
   'runner_token_minted',         -- closes B2; runner-jwt.md mint trail
+  'code_cryptoshredded',         -- v0.5 Cipher Fix-3d; per-run Vault key deleted at retention expiry
   'admin_action',
   'aup_violation_flagged',
   'dmca_takedown_received',
@@ -386,6 +395,10 @@ CREATE TABLE runs (
   cancelled_by        uuid REFERENCES users(id) ON DELETE SET NULL,
   -- Retention timer (NULL until verdict_emitted; computed from tenant policy).
   archive_after       timestamptz,
+  -- v0.5 Jury B1 + Axiom ARCH-D6 + PRD D23: tracking state for GitHub App
+  -- visibility (banner UX driver). Defaults to 'active'; webhook handler flips
+  -- to 'stale' on installation.deleted, back to 'recovered' on reinstall.
+  tracking_state      pr_tracking_state NOT NULL DEFAULT 'active',
   created_at          timestamptz NOT NULL DEFAULT now(),
   updated_at          timestamptz NOT NULL DEFAULT now()
 );
@@ -499,8 +512,11 @@ CREATE TABLE fix_pr_jobs (
   -- Stripe charge for the one-time Auto-PR upcharge ($49 flat / S-M-L tiered).
   stripe_payment_intent_id text,             -- nullable: payment not yet captured
   failed_reason   text,                      -- nullable: only on failed states
-  -- GitHub App uninstall after PR opened (Decision D23): tracking stale.
-  tracking_stale  boolean NOT NULL DEFAULT false,
+  -- v0.5 Jury B1 + Axiom ARCH-D6 + PRD D23: GitHub App uninstall after PR opened.
+  -- Replaces the v0.4 boolean tracking_stale with the 3-state enum so the UI can
+  -- distinguish 'stale' (lost visibility) from 'recovered' (reinstalled,
+  -- merge-state re-queried from GitHub API) per ARCH-D6 §"Recovery."
+  tracking_state  pr_tracking_state NOT NULL DEFAULT 'active',
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT fix_pr_state_pr_consistency CHECK (
