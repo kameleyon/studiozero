@@ -131,7 +131,7 @@ Choreography reference: `motion.md` §"Dashboard".
 | **2.4.11 Focus Not Obscured** | Sticky app header `60px`; `scroll-padding-top: 80px` token. |
 | **2.4.13 Focus Appearance** | Token spec satisfies. |
 | **2.5.8 Target Size** | Sidebar links pad to 44×44 hit area (well over the 24×24 floor); icon buttons reserve 24×24 even when glyph is smaller. |
-| **4.1.2 Name, Role, Value** | Mode chip uses `<span role="status" aria-live="polite">` only when it transitions states (e.g., validation finishes); otherwise static. Bell button has `aria-label="Notifications"` and `aria-haspopup="dialog"` when it triggers a modal-route. |
+| **4.1.2 Name, Role, Value** | Mode chip is decorative — no `role="status"` (HF-S2-1 fix: role="status" is reserved per Canvas A2-1 discipline to verdict-card `<h1>` + live-progress-region wrapper only). State-transition announcements publish via the app-shell live region (single coalesced `<div aria-live="polite" class="sz-sr-only" />` rendered by AppShell). Bell button has `aria-label="Notifications"` and `aria-haspopup="dialog"` when it triggers a modal-route. |
 | **4.1.3 Status Messages** | First-render: no `role="status"` on the H1 — this is a stable route landing, not a transient state change (Halo A2-1 fix applied). |
 
 ### Traversal note

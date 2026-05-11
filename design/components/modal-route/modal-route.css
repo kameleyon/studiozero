@@ -5,7 +5,7 @@
 .sz-modal-route__backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(5, 5, 6, 0.7);
+  background: var(--scrim);
   z-index: 80;
   animation: sz-modal-fade var(--dur-medium) var(--ease-out) both;
 }

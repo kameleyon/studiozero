@@ -56,16 +56,21 @@
 }
 .sz-btn--ghost:active { filter: brightness(0.95); }
 
-/* Variants — destructive */
+/* Variants — destructive.
+ * Canon Phase 4: destructive ≠ FAIL verdict. Restraint-first per Direction A.
+ * Default uses transparent fill with a warm-warning frame (--sev-blocker-border,
+ * which is muted brick, not verdict-FAIL orange). Hover lifts to --bg-3 with a
+ * stronger frame. The destructive *semantic* comes from the confirmation flow
+ * the button triggers, not from a saturated red fill. */
 .sz-btn--destructive {
   background: transparent;
   color: var(--ink-0);
-  border-color: var(--verdict-fail-frame);
+  border-color: var(--sev-blocker-border);
 }
 .sz-btn--destructive:hover {
-  background: var(--verdict-fail);
-  color: var(--verdict-on-fail);
-  border-color: var(--verdict-fail);
+  background: var(--bg-3);
+  color: var(--ink-0);
+  border-color: var(--sev-blocker-text);
 }
 .sz-btn--destructive:active { filter: brightness(0.95); }
 
@@ -97,7 +102,7 @@
   border-radius: 50%;
   border: 2px solid var(--line-2);
   border-top-color: var(--ink-1);
-  animation: sz-btn-spin 700ms linear infinite;
+  animation: sz-btn-spin var(--dur-spinner) linear infinite;
 }
 @keyframes sz-btn-spin { to { transform: rotate(360deg); } }
 

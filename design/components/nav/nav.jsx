@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Chip from "../chip/chip.jsx";
 
 /**
@@ -16,11 +16,48 @@ export function Nav({
   currentPath = "/",
   user = null,
   onOpenNotifications,
+  onOpenHelp,
   onOpenUserMenu,
   brandHref = "/",
   ...rest
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const hamburgerRef = useRef(null);
+  const mobileRef = useRef(null);
+
+  // HF-NAV-1: mobile panel focus trap + Esc + focus return.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const panel = mobileRef.current;
+    if (!panel) return;
+    const focusables = () => panel.querySelectorAll(
+      "a[href], button:not([disabled]), [tabindex]:not([tabindex='-1'])"
+    );
+    focusables()[0]?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMobileOpen(false);
+        hamburgerRef.current?.focus();
+        return;
+      }
+      if (e.key === "Tab") {
+        const list = focusables();
+        if (!list.length) return;
+        const first = list[0];
+        const last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   const marketingLinks = [
     { href: "/audit", label: "Audit" },
@@ -112,6 +149,24 @@ export function Nav({
               </button>
             ) : null}
 
+            {/* Optic F2: Help in app-shell right cluster.
+                Marketing surface routes Help to /docs link in nav; app uses an icon. */}
+            {surface === "app" ? (
+              <button
+                type="button"
+                className="sz-nav__help"
+                aria-label="Help"
+                aria-haspopup="dialog"
+                onClick={onOpenHelp}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1.3.7-2 1.5-2 2.5" />
+                  <circle cx="11.5" cy="17.5" r="0.5" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            ) : null}
+
             {user ? (
               <button
                 type="button"
@@ -130,6 +185,7 @@ export function Nav({
             ) : null}
 
             <button
+              ref={hamburgerRef}
               type="button"
               className="sz-nav__hamburger"
               aria-expanded={mobileOpen}
@@ -143,13 +199,24 @@ export function Nav({
           </div>
         </div>
 
-        {/* Mobile expanded panel — focus-trap left to consumer */}
+        {/* Mobile expanded panel — HF-NAV-1: focus trap + Esc + focus return implemented above. */}
         {mobileOpen ? (
-          <div id="sz-nav-mobile" className="sz-nav__mobile">
+          <div
+            ref={mobileRef}
+            id="sz-nav-mobile"
+            className="sz-nav__mobile"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Primary navigation"
+          >
             <ul>
               {links.map((l) => (
                 <li key={l.href}>
-                  <a href={l.href} aria-current={currentPath === l.href ? "page" : undefined}>
+                  <a
+                    href={l.href}
+                    aria-current={currentPath === l.href ? "page" : undefined}
+                    onClick={() => setMobileOpen(false)}
+                  >
                     {l.label}
                   </a>
                 </li>

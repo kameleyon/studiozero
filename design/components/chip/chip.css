@@ -24,17 +24,27 @@
   vertical-align: middle;
 }
 
-/* Decorative dot — aria-hidden */
+/* Decorative dot — aria-hidden.
+ * Canon Phase 4 finding: workflow-state tones (running, blocked) must NOT
+ * reuse verdict colors. Verdict tones (pass/fail/pwf) are *only* used on the
+ * `.sz-chip--verdict` variant where the entire chip *is* a verdict surface
+ * per PRD §7.2 Step D. Status chips signal workflow state in mono. */
 .sz-chip__dot {
   width: 6px; height: 6px; border-radius: 50%;
-  background: var(--ink-3);
+  background: var(--ink-2);
   flex: 0 0 auto;
 }
-.sz-chip--status.sz-chip--tone-pass .sz-chip__dot,
-.sz-chip--status.sz-chip--tone-running .sz-chip__dot { background: var(--verdict-pass); }
-.sz-chip--status.sz-chip--tone-fail .sz-chip__dot,
-.sz-chip--status.sz-chip--tone-blocked .sz-chip__dot { background: var(--verdict-fail); }
-.sz-chip--status.sz-chip--tone-pwf .sz-chip__dot { background: var(--verdict-pwf); }
+.sz-chip--status.sz-chip--tone-running .sz-chip__dot {
+  background: var(--ink-0);                /* live; not verdict-pass */
+  animation: sz-chip-dot-pulse 2.4s ease-in-out infinite;
+}
+.sz-chip--status.sz-chip--tone-blocked .sz-chip__dot {
+  background: var(--ink-3);                /* dimmed; not verdict-fail */
+}
+@keyframes sz-chip-dot-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
 
 .sz-chip__label { display: inline-block; }
 
@@ -133,7 +143,7 @@
   content: "...";
   letter-spacing: 0;
   margin-left: 2px;
-  animation: sz-chip-dots 1s steps(3, end) infinite;
+  animation: sz-chip-dots var(--dur-loop-fast) steps(3, end) infinite;
 }
 @keyframes sz-chip-dots {
   0% { content: ""; } 33% { content: "."; } 66% { content: ".."; } 100% { content: "..."; }

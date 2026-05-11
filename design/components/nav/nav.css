@@ -30,7 +30,7 @@
   height: var(--sticky-nav-h);
   backdrop-filter: blur(14px) saturate(120%);
   -webkit-backdrop-filter: blur(14px) saturate(120%);
-  background: rgba(5, 5, 6, 0.75);
+  background: var(--scrim);
   border-bottom: 1px solid var(--line-1);
 }
 
@@ -97,7 +97,7 @@
   text-transform: uppercase;
 }
 .sz-nav__link {
-  color: var(--ink-3);
+  color: var(--ink-2);            /* HF-NAV-2: mono-meta at 11px is not "large text" per SC 1.4.3 — must clear 4.5:1; --ink-2 = 6.8:1 */
   text-decoration: none;
   padding: var(--sp-8) var(--sp-4);
   min-height: var(--hit-min);
@@ -156,7 +156,26 @@
   top: 8px; right: 8px;
   width: 6px; height: 6px;
   border-radius: 50%;
-  background: var(--verdict-pass);
+  background: var(--ink-0);       /* Canon CRITICAL: was --verdict-pass — verdict colors are reserved per PRD §7.2 Step D. Notification ≠ PASS verdict. */
+}
+
+/* Help icon button — Optic F2: Help must be discoverable in authed app shell */
+.sz-nav__help {
+  width: 36px; height: 36px;
+  background: transparent;
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  color: var(--ink-1);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.sz-nav__help:hover { background: var(--bg-2); color: var(--ink-0); }
+.sz-nav__help:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 
 .sz-nav__user {

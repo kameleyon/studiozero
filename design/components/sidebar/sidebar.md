@@ -3,7 +3,7 @@
 **Owner:** Canvas · **Status:** shipped
 
 ## Purpose
-The 4-item authed-app sidebar locked by HB-9a: **Projects · Audits · Settings · Help**. (Notifications via the header bell on Nav; not a sidebar item — HB-9a collapse.) Active state is the SR-load-bearing affordance for "where am I" — `aria-current="page"`.
+The 4-item authed-app sidebar locked by HB-9a (resolved against Nav appLinks): **Dashboard · Projects · New audit · Settings**. (Notifications via the header bell on Nav; Help icon in Nav right-cluster per Optic F2 — both moved off the sidebar in the HB-9a collapse.) Active state is the SR-load-bearing affordance for "where am I" — `aria-current="page"`.
 
 ## Anatomy
 - Brand mark (smaller variant — 22 px)

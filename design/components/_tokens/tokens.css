@@ -142,9 +142,15 @@
   --dur-medium: 280ms;
   --dur-slow: 380ms;
   --dur-reveal: 900ms;
+  --dur-spinner: 700ms;          /* button + small inline spinners */
+  --dur-loop-fast: 1s;           /* chip animated dots */
+  --dur-loop: 1400ms;            /* shimmer skeletons (card/table/etc.) */
   --ease: ease;
   --ease-out: cubic-bezier(.2,.7,.2,1);
   --ease-in-out: cubic-bezier(.4,.0,.2,1);
+
+  /* ---------- Overlay scrim (modal-route, nav, drawer) ---------- */
+  --scrim: rgba(5, 5, 6, 0.75);
 
   /* ---------- Sticky-nav scroll padding (SC 2.4.11) ---------- */
   --sticky-nav-h: 60px;

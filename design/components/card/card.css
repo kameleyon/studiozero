@@ -249,7 +249,7 @@
   background-size: 200% 100%;
   color: transparent;
   border-radius: var(--r);
-  animation: sz-card-shimmer 1.4s linear infinite;
+  animation: sz-card-shimmer var(--dur-loop) linear infinite;
 }
 @keyframes sz-card-shimmer {
   from { background-position: 200% 0; }

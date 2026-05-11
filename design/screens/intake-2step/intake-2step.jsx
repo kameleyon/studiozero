@@ -316,11 +316,18 @@ function Step2({
           </fieldset>
         </details>
 
-        {/* Trace S7 soft warning — role="status", inline. */}
+        {/* Persistent soft warning — visible banner (Optic F4: plain-English SKU clarifier).
+            HF-S3-1: no role="status" here (Canvas A2-1 reserves it for verdict-card h1 +
+            live-progress-region wrapper only). Appearance of this banner publishes via
+            the app-shell live region: AppShell consumer should call
+            announce("SKU mismatch — Comprehensive needs the Code audit") when
+            showSkuMismatchWarning transitions false→true. */}
         {showSkuMismatchWarning ? (
-          <div role="status" className="sz-soft-warning">
+          <div className="sz-soft-warning" id="sz-sku-mismatch">
             <p>
-              Comprehensive needs the Code SKU. Upgrade, or run Quick on Surface.
+              Comprehensive needs the <strong>Code</strong> audit — the deeper tier
+              that reads your repo source. Upgrade, or run <strong>Quick</strong> on
+              the Surface audit (what we can see from your URL alone).
             </p>
           </div>
         ) : null}

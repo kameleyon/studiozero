@@ -1,11 +1,13 @@
 "use client";
 import React from "react";
 
+// Optic F1 + IA-D1 alignment: matches Nav appLinks exactly. HB-9a:
+// Notifications via header bell; Help via header help icon (Optic F2).
 const DEFAULT_ITEMS = [
-  { href: "/app/projects", label: "Projects" },
-  { href: "/app/audits",   label: "Audits"   },
-  { href: "/app/settings", label: "Settings" },
-  { href: "/app/help",     label: "Help"     },
+  { href: "/app",            label: "Dashboard" },
+  { href: "/app/projects",   label: "Projects"  },
+  { href: "/app/audits/new", label: "New audit" },
+  { href: "/app/settings",   label: "Settings"  },
 ];
 
 /**
@@ -23,7 +25,11 @@ export function Sidebar({
       <nav aria-label="Primary" className="sz-sidebar__nav">
         <ul className="sz-sidebar__list">
           {items.map((it) => {
-            const isCurrent = currentPath === it.href || currentPath.startsWith(it.href + "/");
+            // Optic F3: Dashboard root ("/app") must EXACT-match — prefix
+            // matching would mark Dashboard active on every /app/* route.
+            const isCurrent = it.href === "/app"
+              ? currentPath === "/app"
+              : currentPath === it.href || currentPath.startsWith(it.href + "/");
             return (
               <li key={it.href}>
                 <a

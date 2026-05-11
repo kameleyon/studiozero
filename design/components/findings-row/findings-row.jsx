@@ -158,6 +158,10 @@ export function FindingsRow({
           aria-controls={menuId}
           aria-label="More actions"
           onClick={() => setMenuOpen((v) => !v)}
+          /* HF-FROW-1 close: kebab is in tab order; Alt+↑/↓ from here
+           * fires reorder so the SC 2.5.7 keyboard alternative is always
+           * reachable. Menu items below remain the primary non-keyboard path. */
+          onKeyDown={onRowKeyDown}
         >
           ⋯
         </button>
