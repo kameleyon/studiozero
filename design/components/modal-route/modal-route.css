@@ -1,0 +1,94 @@
+/* Modal-as-route — Studio Zero design system. Tokens only.
+ * Implements Halo A1-1 focus choreography. */
+@import url("../_tokens/tokens.css");
+
+.sz-modal-route__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 6, 0.7);
+  z-index: 80;
+  animation: sz-modal-fade var(--dur-medium) var(--ease-out) both;
+}
+
+.sz-modal-route {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  z-index: 81;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--bg-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-card);
+  padding: var(--card-pad);
+  font-family: var(--font-sans);
+  color: var(--ink-1);
+  animation: sz-modal-rise var(--dur-medium) var(--ease-out) both;
+}
+@media (max-width: 480px) {
+  .sz-modal-route { padding: var(--card-pad-mobile); }
+}
+
+.sz-modal-route__x {
+  position: absolute;
+  top: var(--sp-12);
+  right: var(--sp-12);
+  width: var(--hit-min);              /* SC 2.5.8 */
+  height: var(--hit-min);
+  border-radius: var(--r);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+.sz-modal-route__x:hover {
+  background: var(--bg-2);
+  border-color: var(--line-2);
+  color: var(--ink-0);
+}
+.sz-modal-route__x:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.sz-modal-route__title {
+  margin: 0 var(--sp-32) var(--sp-12) 0;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--fs-h-step);
+  line-height: var(--lh-h-step);
+  letter-spacing: -0.015em;
+  color: var(--ink-0);
+  outline: none;
+}
+
+.sz-modal-route__body {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink-1);
+  margin: 0 0 var(--sp-24);
+}
+
+.sz-modal-route__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-10);
+  padding-top: var(--sp-14);
+  border-top: 1px solid var(--line-1);
+  flex-wrap: wrap;
+}
+
+@keyframes sz-modal-fade {
+  from { opacity: 0; } to { opacity: 1; }
+}
+@keyframes sz-modal-rise {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
+}

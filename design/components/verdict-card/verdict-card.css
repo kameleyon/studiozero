@@ -1,0 +1,150 @@
+/* Verdict-card — Studio Zero design system. Tokens only.
+ * Implements PRD §7.2 Step D visual hierarchy: verdict → score → CTA → findings. */
+@import url("../_tokens/tokens.css");
+
+.sz-verdict {
+  background: var(--bg-1);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-card);
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-24);
+  font-family: var(--font-sans);
+  color: var(--ink-1);
+}
+@media (max-width: 720px) { .sz-verdict { padding: var(--card-pad-mobile); gap: var(--sp-20); } }
+
+.sz-verdict--pass            { border-color: var(--verdict-pass-frame); }
+.sz-verdict--pass-with-fixes { border-color: var(--verdict-pwf-frame); }
+.sz-verdict--fail            { border-color: var(--verdict-fail-frame); }
+
+/* Verdict header — text + icon + color (SC 1.4.1). Background is the chip
+   itself per tokens.json§verdict_surface, not a card-wide tint. */
+.sz-verdict__h {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-12);
+  align-self: flex-start;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--fs-display-m);
+  line-height: var(--lh-h3);
+  letter-spacing: -0.025em;
+  padding: var(--sp-12) var(--sp-20);
+  border-radius: var(--r-pill);
+}
+.sz-verdict__h--pass            { background: var(--verdict-pass); color: var(--verdict-on-pass);
+                                  border: 1px solid var(--verdict-pass-frame); }
+.sz-verdict__h--pass-with-fixes { background: var(--verdict-pwf);  color: var(--verdict-on-pwf);
+                                  border: 1px solid var(--verdict-pwf-frame); }
+.sz-verdict__h--fail            { background: var(--verdict-fail); color: var(--verdict-on-fail);
+                                  border: 1px solid var(--verdict-fail-frame); }
+
+.sz-verdict__h--loading {
+  background: var(--bg-3);
+  color: var(--ink-1);
+  border: 1px solid var(--line-2);
+}
+.sz-verdict__h--error {
+  background: var(--bg-3);
+  color: var(--sev-blocker-text);
+  border: 1px solid var(--sev-blocker-border);
+}
+
+.sz-verdict__icon {
+  font-family: var(--font-sans);
+  font-size: 0.9em;
+  line-height: 1;
+  display: inline-flex;
+}
+.sz-verdict__sep { opacity: 0.7; }
+
+@media (max-width: 720px) {
+  .sz-verdict__h { font-size: var(--fs-h-step); flex-wrap: wrap; padding: var(--sp-10) var(--sp-14); }
+}
+
+/* Subhead — Herald-canonical body line */
+.sz-verdict__sub {
+  margin: 0;
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-body);
+  color: var(--ink-1);
+  max-width: 64ch;
+}
+
+/* Row: score + cluster + CTA */
+.sz-verdict__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--sp-24);
+}
+@media (max-width: 880px) {
+  .sz-verdict__row {
+    grid-template-columns: 1fr;
+    gap: var(--sp-16);
+  }
+}
+
+.sz-verdict__score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-10);
+}
+.sz-verdict__score-num {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--fs-serif-stat);
+  color: var(--ink-0);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.sz-verdict__score-of {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-data);
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+.sz-verdict__cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+.sz-verdict__audience {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sz-verdict__cta {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sz-verdict__runid {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+.sz-verdict__runid code {
+  font-family: inherit;
+  background: var(--bg-3);
+  border: 1px solid var(--line-1);
+  padding: 2px 8px;
+  border-radius: var(--r);
+}
+
+.sz-verdict__breakdown,
+.sz-verdict__findings {
+  border-top: 1px solid var(--line-1);
+  padding-top: var(--sp-24);
+}

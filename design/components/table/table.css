@@ -1,0 +1,151 @@
+/* Table — Studio Zero design system. Tokens only.
+ * SC 1.4.10 reflow: stack-at-320 px via data-label cards. */
+@import url("../_tokens/tokens.css");
+
+.sz-table-wrap {
+  width: 100%;
+  font-family: var(--font-sans);
+}
+
+.sz-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-body-sm);
+  color: var(--ink-1);
+}
+
+.sz-table__caption {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: var(--sp-12) 0;
+}
+
+.sz-table thead th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 400;
+  color: var(--ink-3);
+  padding: var(--sp-14) var(--sp-16);
+  border-bottom: 1px solid var(--line-2);
+  background: var(--bg-2);
+}
+
+.sz-table tbody th[scope="row"] {
+  text-align: left;
+  font-weight: 400;
+  color: var(--ink-0);
+  padding: var(--sp-14) var(--sp-16);
+  border-bottom: 1px solid var(--line-1);
+  background: var(--bg-1);
+  vertical-align: baseline;
+}
+
+.sz-table tbody td {
+  padding: var(--sp-14) var(--sp-16);
+  border-bottom: 1px solid var(--line-1);
+  background: var(--bg-1);
+  vertical-align: baseline;
+}
+
+.sz-table tbody tr:hover th,
+.sz-table tbody tr:hover td {
+  background: var(--bg-2);
+}
+
+.sz-table.is-striped tbody tr:nth-child(even) th,
+.sz-table.is-striped tbody tr:nth-child(even) td {
+  background: var(--bg-2);
+}
+
+/* Highlighted row (recommended SKU) */
+.sz-table tbody tr[data-state="highlighted"] th,
+.sz-table tbody tr[data-state="highlighted"] td {
+  background: var(--bg-2);
+  color: var(--ink-0);
+  border-color: var(--line-3);
+}
+
+/* Error row */
+.sz-table tbody tr[data-state="error"] th {
+  border-left: 2px solid var(--sev-blocker-border);
+}
+
+/* "Most popular" badge — programmatic, text-based */
+.sz-table__badge {
+  display: inline-block;
+  margin-left: var(--sp-8);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-0);
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  padding: 2px var(--sp-8);
+  vertical-align: middle;
+}
+
+/* Loading shimmer */
+.sz-table[data-state="loading"] tbody th,
+.sz-table[data-state="loading"] tbody td {
+  color: transparent;
+  background: linear-gradient(90deg, var(--bg-2), var(--bg-3), var(--bg-2));
+  background-size: 200% 100%;
+  animation: sz-table-shim 1.4s linear infinite;
+}
+@keyframes sz-table-shim {
+  from { background-position: 200% 0; } to { background-position: -200% 0; }
+}
+
+/* SC 1.4.10 — stack at 320 px. data-label on every cell becomes the visible
+   label for that cell. */
+@media (max-width: 720px) {
+  .sz-table-wrap--stack .sz-table thead { display: none; }
+  .sz-table-wrap--stack .sz-table,
+  .sz-table-wrap--stack .sz-table tbody,
+  .sz-table-wrap--stack .sz-table tr {
+    display: block;
+    width: 100%;
+  }
+  .sz-table-wrap--stack .sz-table tbody tr {
+    background: var(--bg-1);
+    border: 1px solid var(--line-1);
+    border-radius: var(--r);
+    padding: var(--sp-12);
+    margin-bottom: var(--sp-12);
+  }
+  .sz-table-wrap--stack .sz-table th[scope="row"],
+  .sz-table-wrap--stack .sz-table td {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: var(--sp-10);
+    padding: var(--sp-8) 0;
+    border-bottom: 1px solid var(--line-1);
+    background: transparent !important;
+  }
+  .sz-table-wrap--stack .sz-table tbody tr > :last-child {
+    border-bottom: 0;
+  }
+  .sz-table-wrap--stack .sz-table th[scope="row"]::before,
+  .sz-table-wrap--stack .sz-table td::before {
+    content: attr(data-label);
+    font-family: var(--font-mono);
+    font-size: var(--fs-mono-meta);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+}
+
+/* Horizontal scroll fallback when responsive="scroll" */
+.sz-table-wrap--scroll {
+  overflow-x: auto;
+}

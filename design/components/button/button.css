@@ -1,0 +1,131 @@
+/* Button — Studio Zero design system
+ * Tokens only. Inherits `.btn-primary`/`.btn-ghost` structural decisions
+ * from project-template/studiozero/project/styles.css, brought into
+ * compliance (focus ring + ≥24px hit area + token-only colors).
+ */
+@import url("../_tokens/tokens.css");
+
+.sz-btn {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body-sm);
+  letter-spacing: -0.005em;
+  line-height: 1;
+  border-radius: var(--r-pill);
+  border: 1px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-10);
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease),
+              filter var(--dur-fast) var(--ease);
+  min-height: var(--hit-min);            /* SC 2.5.8 */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Sizes — padding ensures ≥24×24 hit area at every size */
+.sz-btn--sm { padding: var(--sp-8)  var(--sp-16); font-size: var(--fs-body-sm); }
+.sz-btn--md { padding: var(--sp-12) var(--sp-24); font-size: var(--fs-body-sm); }
+.sz-btn--lg { padding: var(--sp-16) var(--sp-28); font-size: var(--fs-body); }
+
+/* Variants — primary */
+.sz-btn--primary {
+  background: var(--ink-0);
+  color: var(--bg-0);
+}
+.sz-btn--primary:hover {
+  background: var(--ink-1);
+  transform: translateY(-1px);
+}
+.sz-btn--primary:active { transform: translateY(0); filter: brightness(0.95); }
+
+/* Variants — ghost */
+.sz-btn--ghost {
+  background: transparent;
+  color: var(--ink-1);
+  border-color: var(--line-2);
+}
+.sz-btn--ghost:hover {
+  background: var(--bg-2);
+  border-color: var(--ink-2);
+  color: var(--ink-0);
+}
+.sz-btn--ghost:active { filter: brightness(0.95); }
+
+/* Variants — destructive */
+.sz-btn--destructive {
+  background: transparent;
+  color: var(--ink-0);
+  border-color: var(--verdict-fail-frame);
+}
+.sz-btn--destructive:hover {
+  background: var(--verdict-fail);
+  color: var(--verdict-on-fail);
+  border-color: var(--verdict-fail);
+}
+.sz-btn--destructive:active { filter: brightness(0.95); }
+
+/* Focus — SC 2.4.13 */
+.sz-btn:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.sz-btn--destructive:focus-visible {
+  outline-color: var(--focus-ring-emphasis);
+}
+
+/* Disabled — `data-state="disabled"` mirrors the attribute for SR-only readers */
+.sz-btn[disabled],
+.sz-btn[aria-disabled="true"],
+.sz-btn[data-state="disabled"] {
+  opacity: 0.4;
+  pointer-events: none;
+  transform: none;
+}
+
+/* Loading — aria-busy true */
+.sz-btn[data-state="loading"] {
+  color: var(--ink-2);
+  pointer-events: none;
+}
+.sz-btn__spinner {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line-2);
+  border-top-color: var(--ink-1);
+  animation: sz-btn-spin 700ms linear infinite;
+}
+@keyframes sz-btn-spin { to { transform: rotate(360deg); } }
+
+/* Error state for inline form actions (e.g., BYOK validate failed) */
+.sz-btn[data-state="error"] {
+  color: var(--sev-blocker-text);
+  border-color: var(--verdict-fail-frame);
+}
+
+/* Arrow glyph — SC 3.2.4 consistency */
+.sz-btn__arrow {
+  transition: transform var(--dur-fast) var(--ease);
+  font-size: 1.1em;
+  line-height: 1;
+}
+.sz-btn:hover .sz-btn__arrow { transform: translateX(3px); }
+
+/* Icon — sized to match label */
+.sz-btn__icon {
+  display: inline-flex;
+  width: 16px; height: 16px;
+}
+.sz-btn--lg .sz-btn__icon { width: 20px; height: 20px; }
+
+/* Reflow guard SC 1.4.10 — labels never overflow row at 320px */
+.sz-btn__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

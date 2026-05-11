@@ -1,0 +1,200 @@
+/* Findings-row — Studio Zero design system. Tokens only. */
+@import url("../_tokens/tokens.css");
+
+.sz-finding {
+  list-style: none;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line-1);
+  padding: var(--sp-16) var(--sp-20);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "head    actions"
+    "summary actions"
+    "evidence evidence";
+  gap: var(--sp-10) var(--sp-16);
+  font-family: var(--font-sans);
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  position: relative;
+}
+.sz-finding:hover { background: var(--bg-2); border-color: var(--line-2); }
+.sz-finding:focus-within {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: calc(-1 * var(--focus-width));
+}
+
+.sz-finding[data-state="disabled"] {
+  opacity: 0.55;
+}
+.sz-finding[data-state="disabled"] .sz-finding__summary {
+  text-decoration: line-through;
+  color: var(--ink-2);
+}
+.sz-finding[data-state="loading"] {
+  pointer-events: none;
+}
+.sz-finding[data-state="loading"] .sz-finding__summary {
+  background: linear-gradient(90deg, var(--bg-2), var(--bg-3), var(--bg-2));
+  background-size: 200% 100%;
+  color: transparent;
+  border-radius: var(--r);
+  animation: sz-finding-shim 1.4s linear infinite;
+}
+@keyframes sz-finding-shim { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.sz-finding[data-state="error"] {
+  border-left: 2px solid var(--sev-blocker-border);
+}
+
+.sz-finding__head {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-10);
+  flex-wrap: wrap;
+}
+
+.sz-finding__category {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-1);
+}
+.sz-finding__reviewer {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sz-finding__summary {
+  grid-area: summary;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink-0);
+  letter-spacing: -0.005em;
+}
+
+.sz-finding__actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+  position: relative;
+}
+
+.sz-finding__action {
+  background: transparent;
+  border: 1px solid var(--line-2);
+  color: var(--ink-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--sp-6) var(--sp-12);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  min-height: var(--hit-min);
+  min-width: var(--hit-min);
+}
+.sz-finding__action:hover { background: var(--bg-2); color: var(--ink-0); }
+.sz-finding__action:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.sz-finding__kebab {
+  background: transparent;
+  border: 1px solid var(--line-2);
+  color: var(--ink-1);
+  width: var(--hit-min);
+  height: var(--hit-min);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--r-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sz-finding__kebab:hover { background: var(--bg-2); color: var(--ink-0); }
+.sz-finding__kebab:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.sz-finding__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-6);
+  min-width: 220px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.sz-finding__menu button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--ink-1);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body-sm);
+  padding: var(--sp-10) var(--sp-12);
+  border-radius: var(--r);
+  cursor: pointer;
+  min-height: var(--hit-min);
+}
+.sz-finding__menu button:hover { background: var(--bg-2); color: var(--ink-0); }
+.sz-finding__menu button:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.sz-finding__evidence {
+  grid-area: evidence;
+  margin-top: var(--sp-8);
+  padding-top: var(--sp-12);
+  border-top: 1px solid var(--line-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-14);
+}
+.sz-finding__evidence-body {
+  font-size: var(--fs-body-sm);
+  color: var(--ink-1);
+  line-height: var(--lh-body);
+}
+.sz-finding__rec { display: flex; flex-direction: column; gap: var(--sp-6); }
+.sz-finding__eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* SC 1.4.10 reflow — collapse action labels at 320 px; labels become aria-only */
+@media (max-width: 480px) {
+  .sz-finding {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "head"
+      "summary"
+      "actions"
+      "evidence";
+  }
+  .sz-finding__action { padding: var(--sp-6) var(--sp-10); }
+  .sz-finding__menu { left: 0; right: auto; }
+}

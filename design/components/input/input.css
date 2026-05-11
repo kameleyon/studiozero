@@ -1,0 +1,151 @@
+/* Input — Studio Zero design system. Tokens only. */
+@import url("../_tokens/tokens.css");
+
+.sz-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  font-family: var(--font-sans);
+  color: var(--ink-1);
+}
+
+.sz-input__eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sz-input__label {
+  font-size: var(--fs-body-sm);
+  color: var(--ink-0);
+  line-height: 1.4;
+}
+
+.sz-input__req { color: var(--ink-2); }
+
+.sz-input__field {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-8);
+}
+
+.sz-input__control {
+  flex: 1 1 auto;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  color: var(--ink-1);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  padding: var(--sp-12) var(--sp-14);
+  border-radius: var(--r);
+  min-height: 44px;                    /* SC 2.5.8 hit area */
+  transition: border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+  width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sz-input__control--ta {
+  min-height: 96px;
+  resize: vertical;
+  line-height: var(--lh-body);
+}
+
+.sz-input__control--sel {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: var(--sp-32);
+}
+
+.sz-input__control::placeholder { color: var(--ink-2); }
+
+.sz-input__control:hover { border-color: var(--line-3); }
+
+.sz-input__control:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-color: var(--line-3);
+}
+
+/* Disabled */
+.sz-input[data-state="disabled"] .sz-input__control,
+.sz-input__control:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Error — border + SR-readable error text */
+.sz-input[data-state="error"] .sz-input__control {
+  border-color: var(--sev-blocker-border);
+}
+
+/* Reveal (show/hide for password / BYOK) — keyboard-operable per SC 3.3.8 */
+.sz-input__reveal {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--line-2);
+  color: var(--ink-1);
+  border-radius: var(--r);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 var(--sp-14);
+  min-width: var(--hit-min);
+  min-height: var(--hit-min);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.sz-input__reveal:hover {
+  background: var(--bg-2);
+  color: var(--ink-0);
+}
+.sz-input__reveal:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+/* Trailing slot (e.g., Validate button) */
+.sz-input__slot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+/* Helper + error text */
+.sz-input__help {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-body);
+  color: var(--ink-2);
+}
+
+.sz-input__err {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-body);
+  color: var(--sev-blocker-text);
+}
+
+/* SC 1.4.10 — at 320px, trailing slot stacks below the input */
+@media (max-width: 480px) {
+  .sz-input__field {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sz-input__reveal,
+  .sz-input__slot {
+    min-height: var(--hit-min);
+  }
+}

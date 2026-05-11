@@ -1,0 +1,257 @@
+/* Card — Studio Zero design system. Tokens only.
+ * Inherits `.mode` / `.card` structural decisions from the template baseline
+ * and brings them into compliance (focus ring, no drop-shadow, no hardcoded
+ * hex). Hairline + grain elevation only.
+ */
+@import url("../_tokens/tokens.css");
+
+.sz-card {
+  position: relative;
+  background: var(--bg-1);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-card);
+  padding: var(--card-pad);
+  color: var(--ink-1);
+  font-family: var(--font-sans);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-14);
+  text-decoration: none;
+  transition: border-color var(--dur-slow) var(--ease),
+              transform var(--dur-slow) var(--ease),
+              background var(--dur-slow) var(--ease);
+  overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .sz-card { padding: var(--card-pad-mobile); }
+}
+
+/* Interactive (ProjectCard, ModeCard with CTA on whole surface) */
+.sz-card--interactive { cursor: pointer; }
+.sz-card--interactive:hover {
+  background: var(--bg-2);
+  border-color: var(--line-3);
+  transform: translateY(-3px);
+}
+.sz-card--interactive:active { transform: translateY(0); filter: brightness(0.97); }
+.sz-card--interactive:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+/* Disabled (ModeCard coming-soon per HB-2) */
+.sz-card[data-state="disabled"] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Error (FindingCard disputed) */
+.sz-card[data-state="error"] {
+  border-color: var(--sev-blocker-border);
+}
+
+/* Head — eyebrow row + pill */
+.sz-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-10);
+  flex-wrap: wrap;
+}
+
+.sz-card__eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sz-card__reviewer { color: var(--ink-2); }
+
+.sz-card__pill {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-0);
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  padding: var(--sp-4) var(--sp-10);
+}
+.sz-card__pill--soon { color: var(--ink-3); }
+
+/* Titles */
+.sz-card__title {
+  margin: 0;
+  color: var(--ink-0);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.sz-card__title--mode {
+  font-size: var(--fs-h-card);
+  line-height: var(--lh-h-card);
+}
+.sz-card__title--project { font-size: var(--fs-h-step); line-height: var(--lh-h-step); }
+.sz-card__title--finding { font-size: var(--fs-h-step); line-height: var(--lh-h-step); letter-spacing: -0.015em; }
+
+.sz-card__body {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  max-width: 60ch;
+}
+
+.sz-card__foot { margin-top: auto; padding-top: var(--sp-24); }
+
+/* ProjectCard meta */
+.sz-card__meta {
+  display: flex;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+}
+.sz-card__metachip {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  background: var(--bg-3);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-pill);
+  padding: var(--sp-4) var(--sp-10);
+}
+
+.sz-card__client-tag {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warm);
+  background: var(--bg-3);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-pill);
+  padding: var(--sp-4) var(--sp-10);
+}
+
+.sz-card__score {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-8);
+  margin-top: auto;
+  padding-top: var(--sp-20);
+  border-top: 1px solid var(--line-1);
+}
+.sz-card__score-num {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--fs-serif-stat);
+  line-height: 1;
+  color: var(--ink-0);
+  letter-spacing: -0.02em;
+}
+.sz-card__score-of {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-data);
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+.sz-card__verdict {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--sp-4) var(--sp-10);
+  border-radius: var(--r-pill);
+  border: 1px solid;
+}
+.sz-card__verdict--pass {
+  color: var(--verdict-on-pass); background: var(--verdict-pass); border-color: var(--verdict-pass-frame);
+}
+.sz-card__verdict--pass-with-fixes {
+  color: var(--verdict-on-pwf); background: var(--verdict-pwf); border-color: var(--verdict-pwf-frame);
+}
+.sz-card__verdict--fail {
+  color: var(--verdict-on-fail); background: var(--verdict-fail); border-color: var(--verdict-fail-frame);
+}
+
+/* FindingCard severity chip */
+.sz-card__sev {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--sp-4) var(--sp-10);
+  border-radius: var(--r-pill);
+  border: 1px solid;
+  background: var(--bg-3);
+}
+.sz-card__sev--blocker  { color: var(--sev-blocker-text);  border-color: var(--sev-blocker-border); }
+.sz-card__sev--critical { color: var(--sev-critical-text); border-color: var(--sev-critical-border); }
+.sz-card__sev--major    { color: var(--sev-major-text);    border-color: var(--sev-major-border); }
+.sz-card__sev--minor    { color: var(--sev-minor-text);    border-color: var(--sev-minor-border); }
+.sz-card__sev--polish   { color: var(--sev-polish-text);   border-color: var(--sev-polish-border); }
+
+.sz-card__expand {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--line-2);
+  color: var(--ink-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--sp-6) var(--sp-12);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  min-height: var(--hit-min);
+}
+.sz-card__expand:hover { background: var(--bg-2); color: var(--ink-0); }
+.sz-card__expand:focus-visible {
+  outline: var(--focus-width) solid var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+.sz-card__evidence {
+  border-top: 1px solid var(--line-1);
+  padding-top: var(--sp-14);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+}
+.sz-card__rec-body {
+  font-size: var(--fs-body);
+  color: var(--ink-1);
+  line-height: var(--lh-body);
+}
+
+.sz-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+  padding-top: var(--sp-10);
+  border-top: 1px solid var(--line-1);
+}
+
+/* Loading skeleton */
+.sz-card[data-state="loading"] {
+  pointer-events: none;
+}
+.sz-card[data-state="loading"] .sz-card__title,
+.sz-card[data-state="loading"] .sz-card__body {
+  background: linear-gradient(90deg, var(--bg-2) 0%, var(--bg-3) 50%, var(--bg-2) 100%);
+  background-size: 200% 100%;
+  color: transparent;
+  border-radius: var(--r);
+  animation: sz-card-shimmer 1.4s linear infinite;
+}
+@keyframes sz-card-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
