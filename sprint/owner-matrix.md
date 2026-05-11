@@ -24,7 +24,7 @@ Status legend: **LOCKED** = decision made + artifact landed; **LOCKED (open foll
 | **D1 — GitHub App day-one (per-repo perms)** | LOCKED v0.4 | Forge + Shield | M1 (must ship) | PRD §17 D1. Closes Shield v0.2 B4. `oauth_tokens` table has `installation_id`. |
 | **D2 — Free tier = 1 Project, unlimited Surface re-audits** | LOCKED v0.4 | Forge + Hook | M1 (free-tier ships with M1) | PRD §17 D2. App-layer 1-project cap; EC-7 rate-limit in audit-run-state-machine.md. |
 | **D3 — Auto-PR fix delivery DEFERRED to V1.5** | LOCKED v0.4 | Forge + Comply | V1.5 | PRD §17 D3. Specs-only at MVP. Interim AI disclosure machinery (§11.3) ships at M0/M1. |
-| **D4 — Starter pricing $19 vs $29** | **OPEN** | Penny + Jo | **M2 (Stripe go-live)** | PRD §17 D4. Recommendation if no decision by M2 ticket-cut: ship at $29 with A/B-test slot at $19 for first 200 signups (Penny's call to write up before M2 start). |
+| **D4 — Starter pricing $19 vs $29** | **OPEN** | Penny + Jo | **Decision: M2 ticket-cut (week 7) · Ship-tier: M2 exit (week 9)** (F-MAJ-2 dual-deadline) | PRD §17 D4. Sprint default if Jo doesn't decide by week 7: ship $29 + A/B slot at $19 for first 200 signups. D4 closes at M2 exit regardless. |
 | **D5 — Auto-PR pricing flat $49 vs tiered S/M/L** | **OPEN** | Penny + Jo | **V1.5 spec-kickoff** | PRD §17 D5. Decision pushed to V1.5 spec time per v0.4 panel concurrence. |
 | **D6 — Milestone reorder M2↔M3 (Managed before CLI)** | LOCKED v0.4 | Sprint | M0 (reorder reflected in this plan) | PRD §17 D6. Verified — M2 = Managed billing; M3 = CLI. |
 | **D7 — CLI watermark `Private Run · Self-Audited`** | LOCKED v0.4 | Herald + Halo | M3 (CLI ships) | PRD §17 D7. Copy locked Herald; a11y spec Halo HC1/SC 1.3.1/SC 3.2.4. |

@@ -13,7 +13,7 @@ Stripe-backed Managed mode goes live with per-tenant token caps, regional refund
 
 - M1 exit gate green (every checkbox; nightly p95 SLO green over rolling 7d; self-dogfood M1 PASS or PASS WITH FIXES).
 - M0 + M1 regression gates remain green.
-- **D4 decision LOCKED at M2 ticket-cut** (week 7) — Jo's call between $19 and $29 Starter pricing. Sprint default if no decision: ship $29 + A/B slot at $19 for first 200.
+- **D4 has TWO deadlines (F-MAJ-2 closure):** (a) **Decision deadline = M2 ticket-cut (week 7)** — Jo decides $19 vs $29 (or accepts Sprint default = $29 + A/B slot at $19 for first 200); (b) **Ship-tier deadline = M2 exit (week 9)** — whichever tier (or A/B harness) is wired into Stripe products + `subscriptions` table + Pricing page. If decision deadline (a) slips past week 7, Sprint default ships at deadline (b); D4 closes regardless of whether Jo decided.
 
 ## Deliverables per layer
 
