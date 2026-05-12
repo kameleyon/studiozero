@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { CookieBanner } from "../components/CookieBanner";
 import {
   AI_DISCLOSURE_META_CONTENT,
   AI_DISCLOSURE_META_NAME,
@@ -100,7 +101,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          {/* Lens (Phase 9 M1 Batch 3) — banner self-hides when a
+              `sz_consent` localStorage record is already present. */}
+          <CookieBanner />
+        </AuthProvider>
       </body>
     </html>
   );

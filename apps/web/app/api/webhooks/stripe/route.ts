@@ -40,6 +40,7 @@
 import Stripe from "stripe";
 
 import { aiDisclosureHeaders } from "../../../../lib/ai-disclosure";
+import { track } from "../../../../lib/analytics-events.v1";
 import { createServiceRoleClient } from "../../../../lib/supabase-service";
 
 export const runtime = "nodejs";
@@ -143,11 +144,38 @@ export async function POST(req: Request): Promise<Response> {
         await handleInvoiceFailed(supabase, event);
         break;
       case "invoice.payment_succeeded":
-      case "checkout.session.completed":
       case "payment_intent.succeeded":
       case "charge.dispute.created":
         // billing_events row is the ledger; downstream workers consume it.
         break;
+      case "checkout.session.completed": {
+        // Lens spec §2.4 paid_conversion — fire AFTER the billing_events
+        // insert so duplicates from Stripe retries don't double-count.
+        const session = event.data.object as Stripe.Checkout.Session;
+        const amountCents = extractAmountCents(event) ?? 0;
+        const currency = (extractCurrency(event) ?? "USD").toUpperCase();
+        // Resolve tier + mode from metadata or line items; Penny ships
+        // M2 metadata. Defensive defaults keep the event well-typed.
+        const tier =
+          (session.metadata?.tier as string | undefined) ?? "unknown";
+        const mode =
+          (session.metadata?.mode as "byok" | "cli" | "managed" | undefined) ??
+          "managed";
+        const planFamily =
+          (session.metadata?.plan_family as
+            | "byok"
+            | "managed"
+            | "cli"
+            | undefined) ?? mode;
+        void track("paid_conversion", {
+          tier,
+          mode,
+          currency,
+          amount_cents: amountCents,
+          plan_family: planFamily,
+        });
+        break;
+      }
       default:
         // Unknown event type — already logged in billing_events. No-op.
         break;

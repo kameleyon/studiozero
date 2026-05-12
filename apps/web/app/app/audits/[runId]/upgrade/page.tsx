@@ -1,7 +1,8 @@
 import * as React from "react";
 
-import { Button } from "../../../../../components/Button";
+import { UpgradeCta } from "./UpgradeCta";
 import { Chip } from "../../../../../components/Chip";
+
 
 /**
  * /app/audits/[runId]/upgrade — IA-D2 E2 upsell page.
@@ -55,14 +56,9 @@ export default async function UpgradePage({
         </div>
       </div>
 
-      <div className="sz-intake-actions">
-        <Button variant="ghost" size="md" href={`/app/audits/${runId}`}>
-          Back to verdict
-        </Button>
-        <Button variant="primary" size="lg" href="/app/settings/billing" arrow>
-          Upgrade to Code
-        </Button>
-      </div>
+      {/* Lens M1 Batch 3 — client island fires upgrade_card_shown +
+          upgrade_clicked. Surrounding page stays server-rendered. */}
+      <UpgradeCta runId={runId} fromTier="surface_free" toTier="byok_code" />
     </>
   );
 }

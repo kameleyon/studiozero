@@ -20,9 +20,12 @@
  * Mock fallback: when `isMockMode()` we skip the DB write and redirect
  * with a query flag so the next page shows the "installed" demo state.
  */
+import * as crypto from "node:crypto";
+
 import { NextResponse } from "next/server";
 
 import { aiDisclosureHeaders } from "../../../../lib/ai-disclosure";
+import { track } from "../../../../lib/analytics-events.v1";
 import { hasSupabaseServiceEnv, isMockMode } from "../../../../lib/env";
 import { createServerSupabaseClient } from "../../../../lib/supabase-server";
 
@@ -131,6 +134,18 @@ export async function GET(req: Request): Promise<NextResponse> {
         { headers: aiDisclosureHeaders },
       );
     }
+
+    // Lens spec §2.2 + Cipher Fix-3b: HMAC-hash the installation id
+    // (key = tenantId) so the analytics event never carries the raw id.
+    const installationIdHash = crypto
+      .createHmac("sha256", tenantIdMeta)
+      .update(String(installationId))
+      .digest("hex")
+      .slice(0, 32);
+    void track("github_app_install_completed", {
+      tenant_id: tenantIdMeta,
+      installation_id_hash: installationIdHash,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "install_callback_failed";
     return NextResponse.redirect(

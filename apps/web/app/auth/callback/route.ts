@@ -25,6 +25,7 @@
 import { NextResponse } from "next/server";
 
 import { aiDisclosureHeaders } from "../../../lib/ai-disclosure";
+import { track } from "../../../lib/analytics-events.v1";
 import { createServerSupabaseClient } from "../../../lib/supabase-server";
 
 export const runtime = "nodejs";
@@ -70,12 +71,24 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   try {
     const supabase = await createServerSupabaseClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
       return NextResponse.redirect(
         new URL(`/login?error=${encodeURIComponent(error.message)}`, url.origin),
         { headers: aiDisclosureHeaders },
       );
+    }
+    // Lens spec §2.1 email_verification_completed — fires once per
+    // session exchange. The latency tracker is approximate (we don't
+    // know exactly when the original signup happened from inside the
+    // callback) so we omit `latency_ms_since_signup` here; M4 wires the
+    // server-side trigger that has the actual signup timestamp.
+    const userId = data.user?.id;
+    if (userId) {
+      void track("email_verification_completed", {
+        user_id: userId,
+        latency_ms_since_signup: 0,
+      });
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "callback_failed";

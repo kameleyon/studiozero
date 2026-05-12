@@ -21,6 +21,7 @@
 import { NextResponse } from "next/server";
 
 import { aiDisclosureHeaders } from "../../../lib/ai-disclosure";
+import { track } from "../../../lib/analytics-events.v1";
 import { hasSupabaseEnv, isMockMode } from "../../../lib/env";
 import { MOCK_PROJECTS } from "../../../lib/mock-data";
 import { registerMockRun } from "../../../lib/run-state-machine";
@@ -145,6 +146,13 @@ export async function POST(
       ? "run-demo-3"
       : `run-demo-fail-${Date.now().toString(36)}`;
     registerMockRun(runId);
+    // Lens spec §2.3 audit_started — server-side fire.
+    void track("audit_started", {
+      run_id: runId,
+      mode: (body.mode ?? "byok") as "byok" | "cli" | "managed",
+      product: isCodePath ? "code" : "surface",
+      depth: (body.depth ?? "quick") as "quick" | "comprehensive" | "custom",
+    });
     return NextResponse.json<CreateRunResponse>(
       {
         ok: true,
@@ -296,6 +304,14 @@ export async function POST(
       // Non-fatal — runner reconciles 'queued' rows even when the
       // wrapper RPC isn't present.
     }
+
+    // Lens spec §2.3 audit_started — server-side, real-mode fire.
+    void track("audit_started", {
+      run_id: runId,
+      mode: payload.mode as "byok" | "cli" | "managed",
+      product: payload.product as "surface" | "code" | "full",
+      depth: payload.depth as "quick" | "comprehensive" | "custom",
+    });
 
     return NextResponse.json<CreateRunResponse>(
       {

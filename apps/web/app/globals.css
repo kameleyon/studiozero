@@ -917,6 +917,137 @@ main { position: relative; z-index: 2; }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+ * Legal page baseline — Phase 9 M1 Batch 3 (Comply).
+ *
+ * /terms · /privacy · /aup · /subprocessors · /system-card all render
+ * via `components/LegalPage.tsx` + `lib/legal-markdown.tsx`. Typography
+ * tuned for sustained reading of dense legal copy: 65ch column, larger
+ * line-height than body, generous heading rhythm, scrollable tables.
+ * SC 1.4.10 reflow at 320px without horizontal scroll for prose blocks;
+ * tables are explicitly horizontally scrollable inside a region landmark.
+ * ───────────────────────────────────────────────────────────────────── */
+.legal-page {
+  padding-block: var(--sp-120) var(--sp-80);
+}
+@media (max-width: 720px) {
+  .legal-page { padding-block: var(--sp-80) var(--sp-48); }
+}
+.legal-page h1 {
+  font-size: var(--fs-display-l);
+  line-height: var(--lh-h2);
+  letter-spacing: -0.022em;
+  margin-bottom: var(--sp-16);
+  color: var(--ink-0);
+}
+@media (max-width: 720px) { .legal-page h1 { font-size: var(--fs-display-m); } }
+.legal-page .legal-meta {
+  color: var(--ink-2);
+  font-size: var(--fs-body-sm);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  margin-bottom: var(--sp-40);
+  padding-bottom: var(--sp-24);
+  border-bottom: 1px solid var(--line-1);
+}
+.legal-body {
+  color: var(--ink-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  max-width: 72ch;
+}
+.legal-body h2 {
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  letter-spacing: -0.018em;
+  color: var(--ink-0);
+  margin-top: var(--sp-48);
+  margin-bottom: var(--sp-16);
+}
+.legal-body h3 {
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
+  color: var(--ink-0);
+  margin-top: var(--sp-32);
+  margin-bottom: var(--sp-12);
+}
+.legal-body h4, .legal-body h5, .legal-body h6 {
+  font-size: var(--fs-body-lg);
+  color: var(--ink-0);
+  margin-top: var(--sp-24);
+  margin-bottom: var(--sp-8);
+}
+.legal-body p {
+  margin-bottom: var(--sp-16);
+}
+.legal-body ul, .legal-body ol {
+  margin-bottom: var(--sp-16);
+  padding-left: var(--sp-24);
+}
+.legal-body li {
+  margin-bottom: var(--sp-8);
+}
+.legal-body code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--surface-1, rgba(255,255,255,0.04));
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  color: var(--ink-0);
+}
+.legal-body pre {
+  background: var(--surface-1, rgba(255,255,255,0.04));
+  padding: var(--sp-16);
+  border-radius: 6px;
+  overflow-x: auto;
+  margin-bottom: var(--sp-16);
+}
+.legal-body pre code {
+  background: transparent;
+  padding: 0;
+}
+.legal-body blockquote {
+  border-left: 3px solid var(--line-2, rgba(255,255,255,0.16));
+  padding-left: var(--sp-16);
+  margin-block: var(--sp-16);
+  color: var(--ink-1);
+  font-style: normal;
+}
+.legal-body a {
+  color: var(--accent, currentColor);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.legal-body a:hover, .legal-body a:focus-visible {
+  text-decoration-thickness: 2px;
+}
+.legal-body hr {
+  border: 0;
+  border-top: 1px solid var(--line-1);
+  margin-block: var(--sp-32);
+}
+.legal-table-wrap {
+  overflow-x: auto;
+  margin-bottom: var(--sp-24);
+  max-width: 100%;
+}
+.legal-body table {
+  border-collapse: collapse;
+  font-size: var(--fs-body-sm);
+  min-width: 100%;
+}
+.legal-body th, .legal-body td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--sp-8) var(--sp-12);
+  border-bottom: 1px solid var(--line-1);
+}
+.legal-body th {
+  color: var(--ink-0);
+  font-weight: 600;
+  background: var(--surface-1, rgba(255,255,255,0.02));
+}
+
+/* ─────────────────────────────────────────────────────────────────────
  * 7. App shell — Phase 9 M1 starter (authed routes)
  *
  * Composition: <header> · <aside> Sidebar · <main>

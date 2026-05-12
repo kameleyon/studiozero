@@ -26,7 +26,9 @@ import { Button } from "../../../../components/Button";
 import { Chip } from "../../../../components/Chip";
 import { Form } from "../../../../components/Form";
 import { Input } from "../../../../components/Input";
+import { useSupabaseUser } from "../../../../lib/auth-context";
 import { getFunctionsBaseUrl, isMockMode } from "../../../../lib/env";
+import { track } from "../../../../lib/posthog-client";
 import { createBrowserSupabaseClient } from "../../../../lib/supabase-client";
 
 // Locked Herald error copy — never surfaces raw "HTTP 400" or Supabase
@@ -36,6 +38,7 @@ const ERR_REJECTED =
 
 export default function ByokPage(): React.ReactElement {
   const router = useRouter();
+  const { user } = useSupabaseUser();
   const [key, setKey] = React.useState<string>("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState<boolean>(false);
@@ -50,10 +53,18 @@ export default function ByokPage(): React.ReactElement {
       return;
     }
     setSubmitting(true);
+    const startedAt = Date.now();
 
     // ---- MOCK path: keep clickable demo working ---------------------
     if (isMockMode()) {
       await new Promise((r) => setTimeout(r, 800));
+      // Lens spec §2.2 byok_key_validated — even in mock, fire the
+      // event so funnel walkers in CI see the row.
+      track("byok_key_validated", {
+        tenant_id: user?.tenantId ?? "mock-tenant",
+        success: true,
+        latency_ms: Date.now() - startedAt,
+      });
       router.push("/app/onboarding/github");
       return;
     }
@@ -92,15 +103,35 @@ export default function ByokPage(): React.ReactElement {
       });
 
       if (res.status === 200) {
+        track("byok_key_validated", {
+          tenant_id: user?.tenantId ?? "",
+          success: true,
+          latency_ms: Date.now() - startedAt,
+        });
         router.push("/app/onboarding/github");
         return;
       }
 
       // 400 / 401 / 422 / anything else — same locked copy. We never
       // surface Anthropic's raw error to the user (Proof F-MOCK-011).
+      track("byok_key_failed", {
+        tenant_id: user?.tenantId,
+        failure_reason:
+          res.status === 429
+            ? "rate_limited"
+            : res.status === 401 || res.status === 400
+              ? "invalid_key"
+              : "unknown",
+        latency_ms: Date.now() - startedAt,
+      });
       setError(ERR_REJECTED);
       setSubmitting(false);
     } catch {
+      track("byok_key_failed", {
+        tenant_id: user?.tenantId,
+        failure_reason: "network",
+        latency_ms: Date.now() - startedAt,
+      });
       setError(ERR_REJECTED);
       setSubmitting(false);
     }

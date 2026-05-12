@@ -28,9 +28,11 @@
  */
 import * as React from "react";
 
+import { analytics } from "./analytics-gate";
 import { isMockMode } from "./env";
 import { MOCK_USER, type MockUser } from "./mock-data";
 import { createBrowserSupabaseClient } from "./supabase-client";
+import { captureOnLanding } from "./utm-attribution";
 
 import type { SupabaseClient, User as SupabaseAuthUser } from "@supabase/supabase-js";
 
@@ -115,6 +117,27 @@ export function AuthProvider({
     initialUser === undefined && !mock,
   );
 
+  // Lens M1 Batch 3 — capture UTMs and load analytics on first paint.
+  // Both are no-ops on SSR (window-guarded) and consent-aware (the gate
+  // checks localStorage `sz_consent` before firing PostHog network calls).
+  React.useEffect(() => {
+    captureOnLanding();
+    void analytics.loadAndInitAnalytics();
+  }, []);
+
+  // Identify the user with PostHog when their session lands; reset on
+  // signout. Both calls short-circuit if analytics consent is not granted.
+  React.useEffect(() => {
+    if (user) {
+      analytics.identify(user.id, {
+        tenant_id: user.tenantId,
+        mode_pref: user.modePref,
+        byok_verified: user.byokVerified,
+        github_app_installed: user.githubAppInstalled,
+      });
+    }
+  }, [user]);
+
   React.useEffect(() => {
     if (mock) {
       // Mock mode: synchronous + stable.
@@ -155,6 +178,8 @@ export function AuthProvider({
   }, [mock]);
 
   const signOut = React.useCallback(async (): Promise<void> => {
+    // Lens spec §2.8 — reset PostHog identity on every signout.
+    analytics.reset();
     if (mock) {
       if (typeof document !== "undefined") {
         document.cookie =
