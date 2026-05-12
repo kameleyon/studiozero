@@ -22,8 +22,13 @@
 # ── Backend (Forge + Shield on API surface) ────────────────────────
 /apps/web/app/api/**                    @kameleyon
 /apps/web/middleware.ts                 @kameleyon
+# /apps/runner/** — Forge owns runner code; Shield co-reviews sandbox-
+# adjacent paths (egress, JWT refresh). M1 Batch 3 explicit assignment.
 /apps/runner/**                         @kameleyon
 /packages/runner-contract/**            @kameleyon
+# Supabase Edge Functions — Forge implements, Shield reviews secrets
+# handling (mint-runner-token, llm-gateway, byok-validate).
+/supabase/functions/**                  @kameleyon
 
 # ── Finance (Penny + Meter + Ledger) ───────────────────────────────
 /finance/**                             @kameleyon
@@ -35,12 +40,21 @@
 /.husky/**                              @kameleyon
 /iac/**                                 @kameleyon
 /architecture/iac/**                    @kameleyon
+# Railway IaC — Terra owns project lifecycle; Pipeline owns CI deploy;
+# Shield owns NetworkPolicy + seccomp. Triple-owner path; reviews
+# required from each before a Railway-shape change merges. M1 Batch 3.
+/architecture/iac/railway/**            @kameleyon
 
 # ── Security (Shield + Cipher + Verify on threat model + corpora) ──
 /architecture/threat-model.md           @kameleyon
 /architecture/test-strategy.md          @kameleyon
 /runner/fixtures/**                     @kameleyon
 /compliance/**                          @kameleyon
+# CipherCircle exclusive review path — the secret-pattern denylist
+# is THE canonical list; every change must pass Cipher's eye to keep
+# the inline CI secret-scan + Sentry beforeSend in sync.
+/apps/web/lib/sentry-redaction.ts       @kameleyon
+/apps/web/lib/sentry-redaction.test.ts  @kameleyon
 
 # ── Brand / Design (Pixel + Canvas + Halo) ─────────────────────────
 /brand/**                               @kameleyon

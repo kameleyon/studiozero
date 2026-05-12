@@ -100,7 +100,7 @@ Ship the audit MVP (BYOK only) end-to-end — GitHub-App repo intake, Surface + 
 
 ### Platform (Locale, Edge, Tongue)
 
-- *(no deliverable; multi-region deferred per ARCH-D8)*
+- _(no deliverable; multi-region deferred per ARCH-D8)_
 
 ### AI (Cortex, Memory, Oracle)
 
@@ -145,19 +145,19 @@ Mirrors `architecture/test-strategy.md` §3 M1 exactly. M0 gates remain green (r
 - [ ] `tests/integration/jwt-mint-tenant-scoped.spec.ts` green (full M1 version — replaces M0 prototype).
 - [ ] `0002_rls_and_runner_jwt.sql` applies cleanly to staging.
 - [ ] **R21 mitigation (b) — WCAG conformance vendor net-30 (or better) terms LOCKED in engagement letter** (~$10k bill payable wk 18+ to align with MRR ramp). Letter signed by Halo + Comply + Jo. File: `compliance/wcag-audit-engagement-2026.pdf` exists in HEAD with payment terms.
-- [ ] **ARCH-D9 closed:** egress allowlist primitive specced and enforced; `architecture/iac/runner-pool/network-policy.yaml` committed; integration test exercises a blocked egress destination.
+- [x] **ARCH-D9 closed:** egress allowlist primitive specced and enforced; `architecture/iac/railway/network-policy.yaml` committed (Cilium CiliumNetworkPolicy v2: default-deny egress + FQDN allowlist for Anthropic/Supabase/GitHub/Sentry/PostHog/CoreDNS + CIDR egressDeny for RFC 1918, loopback, link-local, IMDS, ULA, IPv4-mapped IPv6 private). Layer-3 enforcement complements `apps/runner/src/ssrf-guard.ts` (Forge-2 commit 43779fb) app-layer Layer-1 filter. M1+1 proxy-layer spec lives at `architecture/iac/railway/egress-proxy.md` (DNS pinning + per-redirect re-validate + per-tenant rate limit). Pipeline M1 Batch 3.
 
 ## Risks specific to this milestone
 
-| # | Risk | Likelihood | Impact | Mitigation owner | Deadline |
-|---|---|---|---|---|---|
-| R2 | Audit verdict perceived as unfair / inconsistent | Medium | High | Jury (score versioning) + Herald (verdict-screen copy) | M1 close — verdict ships with score_engine_version stamp + per-finding evidence |
-| R4 | BYOK key leak from logs or DB | Low | Critical | Cipher (Vault AEAD+AAD, `beforeSend`) | M1 — Fix-1 in 0002 migration; redaction corpus green |
-| R5 | Customer code retention breach (GDPR/IP) | Low | Critical | Atlas (cryptoshred), Cipher (Vault key delete) | M1 — `cryptoshredding.spec.ts` green (full purge test at M4) |
-| R8 | Studio Zero ships a build with a bug we should have caught | High | Medium | Sprint (dogfood gate), Verify (test plan) | M1 close — self-dogfood verdict PASS or PASS WITH FIXES |
-| R9 | Concentration risk on Anthropic | Medium | High | Forge (provider abstraction), Crash (circuit breaker) | M1 — abstraction lives in `runner/llm/`; second provider at V2 |
-| R13 | Egress allowlist primitive (ARCH-D9) underestimated as a DevOps spike | Medium | High | Shield + Cipher (Cilium NetworkPolicy + DNS-pin) | M1 exit gate |
-| R16 | Cross-mode consistency drift (BYOK vs Managed verdicts diverge as Anthropic ships new models) | Medium | Medium | Forge (model pins) + Verify (nightly drift dashboard) | M1 close — pins committed |
+| #   | Risk                                                                                          | Likelihood | Impact   | Mitigation owner                                       | Deadline                                                                        |
+| --- | --------------------------------------------------------------------------------------------- | ---------- | -------- | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| R2  | Audit verdict perceived as unfair / inconsistent                                              | Medium     | High     | Jury (score versioning) + Herald (verdict-screen copy) | M1 close — verdict ships with score_engine_version stamp + per-finding evidence |
+| R4  | BYOK key leak from logs or DB                                                                 | Low        | Critical | Cipher (Vault AEAD+AAD, `beforeSend`)                  | M1 — Fix-1 in 0002 migration; redaction corpus green                            |
+| R5  | Customer code retention breach (GDPR/IP)                                                      | Low        | Critical | Atlas (cryptoshred), Cipher (Vault key delete)         | M1 — `cryptoshredding.spec.ts` green (full purge test at M4)                    |
+| R8  | Studio Zero ships a build with a bug we should have caught                                    | High       | Medium   | Sprint (dogfood gate), Verify (test plan)              | M1 close — self-dogfood verdict PASS or PASS WITH FIXES                         |
+| R9  | Concentration risk on Anthropic                                                               | Medium     | High     | Forge (provider abstraction), Crash (circuit breaker)  | M1 — abstraction lives in `runner/llm/`; second provider at V2                  |
+| R13 | Egress allowlist primitive (ARCH-D9) underestimated as a DevOps spike                         | Medium     | High     | Shield + Cipher (Cilium NetworkPolicy + DNS-pin)       | M1 exit gate                                                                    |
+| R16 | Cross-mode consistency drift (BYOK vs Managed verdicts diverge as Anthropic ships new models) | Medium     | Medium   | Forge (model pins) + Verify (nightly drift dashboard)  | M1 close — pins committed                                                       |
 
 ## Decisions that MUST land before milestone exit
 
@@ -180,12 +180,12 @@ From `owner-matrix.md` §3 M1 row:
 
 ## Burndown (weekly)
 
-| Week | Planned | Completed | Blocked | Notes |
-|---|---|---|---|---|
-| 3 | `0002_rls_and_runner_jwt.sql` drafted; pg-boss workers live on Railway; SSRF + path-traversal + ingestion corpus skeletons | | | |
-| 4 | GitHub App clone + runner contract end-to-end on `synthetic-repo-fail`; mint + refresh JWT working; sandbox + seccomp + egress primitive ARCH-D9 spike | | | |
-| 5 | All four D9 corpora green; Goal-1/2/5 e2e green; M2 ticket-cut scoping; D4 decision flagged to Jo | | | |
-| 6 | Nightly SLO dashboard 7-day green; self-dogfood gate M1 audit run; axe-core PR-blocking gate live; ARCH-D9 closed | | | |
+| Week | Planned                                                                                                                                                | Completed | Blocked | Notes |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ------- | ----- |
+| 3    | `0002_rls_and_runner_jwt.sql` drafted; pg-boss workers live on Railway; SSRF + path-traversal + ingestion corpus skeletons                             |           |         |       |
+| 4    | GitHub App clone + runner contract end-to-end on `synthetic-repo-fail`; mint + refresh JWT working; sandbox + seccomp + egress primitive ARCH-D9 spike |           |         |       |
+| 5    | All four D9 corpora green; Goal-1/2/5 e2e green; M2 ticket-cut scoping; D4 decision flagged to Jo                                                      |           |         |       |
+| 6    | Nightly SLO dashboard 7-day green; self-dogfood gate M1 audit run; axe-core PR-blocking gate live; ARCH-D9 closed                                      |           |         |       |
 
 ## Open questions
 

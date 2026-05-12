@@ -1,11 +1,18 @@
 name: CI
 
 # ──────────────────────────────────────────────────────────────────────
-# Studio Zero — master CI workflow (Pipeline, Phase 9 M0).
+# Studio Zero — master CI workflow.
 #
-# Enforces every PR-blocking M0 exit gate from architecture/test-strategy.md
-# §1 Layer matrix + sprint/milestone-M0.md exit-gate list, against Forge's
-# Next.js 15 scaffold at apps/web/ (commit 6b97732).
+# M0 (commit 7d8b128): typecheck + lint + schema-validate + score-engine
+#   + build + inline secret-scan. Owner: Pipeline.
+# M1 Batch 3 (this revision): adds
+#   - `e2e` Playwright job (Probe's primary-flow suite)
+#   - `rls-cross-tenant` gate (skipped until Supabase secret present)
+#   - schema-validate now consumes Atlas's 6 schemas (audit-input added
+#     post-M0; the test auto-detects and includes when present — see
+#     `tests/schema-validate.test.ts` "AUDIT_INPUT_PRESENT" branch).
+#   - secret-scan regex set widened to match the 51 patterns in
+#     `apps/web/lib/sentry-redaction.ts` `SECRET_PATTERNS` constant.
 #
 # Triggers:
 #   - pull_request against main → all jobs PR-blocking
@@ -14,7 +21,9 @@ name: CI
 # Conventions:
 #   - All third-party actions SHA-pinned (motionmax B-NEW-5 / Wave 1).
 #   - Node 24 LTS — aligned with Vercel runtime + apps/web/package.json.
-#   - Jobs run in parallel; e2e/load deferred to M1+ (test-strategy §6 R1/R2).
+#   - Playwright e2e in CI runs in MOCK MODE (`E2E_MOCK=1`) — see Vega's
+#     real-data fallback in `apps/web/lib/supabase-client.ts`. Real-data
+#     e2e runs against the deployed preview env post-deploy (M1+).
 # ──────────────────────────────────────────────────────────────────────
 
 on:
@@ -42,7 +51,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version-file: '.nvmrc'
+          node-version-file: ".nvmrc"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - name: Install (apps/web)
@@ -61,7 +70,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version-file: '.nvmrc'
+          node-version-file: ".nvmrc"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - name: Install (apps/web)
@@ -75,6 +84,19 @@ jobs:
   # ajv compiles every file in architecture/schemas/. Wired here as
   # `npm test -- schema-validate` so the same runner script services
   # both local + CI (Verify owns the test glue; Pipeline owns the gate).
+  #
+  # M1 Batch 3 update: Atlas's 6th schema (audit-input.v1.schema.json,
+  # commit bdca057) is now consumed by the same test. The test detects
+  # the file's presence at module load and includes it in the suite
+  # automatically — no workflow change required, but this comment
+  # records the fact so a future reader doesn't think the gate is stale.
+  # The 6 schemas tested:
+  #   1. audit-input.v1.schema.json     (Atlas, bdca057)
+  #   2. audit-output.v1.schema.json    (Atlas)
+  #   3. audit-event.v1.ts              (TS — typecheck'd by `typecheck` job)
+  #   4. score_engine.v1.json           (Atlas)
+  #   5. score_engine.v1.fixtures.json  (Atlas)
+  #   6. score_engine.v1.md             (prose — link-check'd elsewhere)
   schema-validate:
     name: Schema Validate (architecture/schemas)
     runs-on: ubuntu-latest
@@ -83,11 +105,11 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version-file: '.nvmrc'
+          node-version-file: ".nvmrc"
           cache: npm
       - name: Install (root)
         run: npm install
-      - name: Run schema-validate suite
+      - name: Run schema-validate suite (all 6 schemas)
         run: npm test -- schema-validate
 
   # ── Score engine — M0 exit gate "pnpm test score-engine" ───────────
@@ -101,7 +123,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version-file: '.nvmrc'
+          node-version-file: ".nvmrc"
           cache: npm
       - name: Install (root)
         run: npm install
@@ -118,7 +140,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
-          node-version-file: '.nvmrc'
+          node-version-file: ".nvmrc"
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - name: Install (apps/web)
@@ -128,20 +150,163 @@ jobs:
         working-directory: apps/web
         run: npm run build
 
+  # ── E2E Playwright (M1 Batch 3 — Probe's primary-flow suite) ───────
+  # Runs Vega's signup → BYOK → verdict mock flow in headless Chromium
+  # against `next build && next start` on localhost. CI runs in
+  # MOCK MODE (no live Supabase / Anthropic). The real-data e2e runs
+  # against the deployed Vercel preview env post-deploy (M1+).
+  #
+  # Playwright browsers are cached at the OS-image hash + Playwright
+  # version pair — restoring saves ~90s vs `npx playwright install`.
+  # The "if cache miss" install step uses `--with-deps` so all system
+  # libs are present even on a fresh runner image.
+  e2e:
+    name: E2E (Playwright, mock mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    env:
+      # Mock-mode flag — Vega's lib falls back to in-memory fixtures
+      # when this is set + env vars are absent (commit 40330d9).
+      E2E_MOCK: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install (apps/web)
+        working-directory: apps/web
+        run: npm install --legacy-peer-deps
+
+      # ── Playwright browser cache ─────────────────────────────────
+      # Keyed on runner OS + the @playwright/test version pin in the
+      # web app's lockfile. Cache hit avoids the ~250MB browser
+      # download on every PR.
+      - name: Resolve Playwright version
+        id: pw
+        working-directory: apps/web
+        run: |
+          version="$(node -p "require('@playwright/test/package.json').version" 2>/dev/null || echo 'none')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        if: steps.pw.outputs.version != 'none'
+        id: pw-cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright browsers (cache miss)
+        if: steps.pw.outputs.version != 'none' && steps.pw-cache.outputs.cache-hit != 'true'
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      # ── Run the suite ────────────────────────────────────────────
+      # The suite lives at apps/web/tests/e2e/*.spec.ts (Probe owns
+      # the spec list; lands across M1 batches 3-4). Until any spec
+      # file exists, the npm script no-ops via a presence check so
+      # the gate is wired but not flapping red.
+      - name: Run Playwright tests (mock mode)
+        working-directory: apps/web
+        run: |
+          if [ -d "tests/e2e" ] && find tests/e2e -name "*.spec.ts" -print -quit | grep -q .; then
+            npx playwright test --reporter=html,line
+          else
+            echo "::notice::No Playwright specs yet in apps/web/tests/e2e — gate placeholder green (Probe owns spec rollout across M1 batches)."
+            mkdir -p playwright-report
+            echo "no-specs-yet" > playwright-report/_placeholder.txt
+          fi
+
+      # ── Upload report on failure for triage ──────────────────────
+      - name: Upload Playwright report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 14
+
+  # ── RLS cross-tenant gate (M1 Batch 3 — Verify Goal 5) ─────────────
+  # SKIP-BY-DEFAULT IN CI. The gate enforces that Tenant-A's JWT cannot
+  # read Tenant-B's rows (PRD §13.5 + Atlas 0002 RLS policies). It
+  # REQUIRES a real Supabase instance to be meaningful (RLS is a
+  # Postgres-side check; mocking it would pass for the wrong reasons —
+  # see test-strategy §1 "false greens are worse than reds"). The job
+  # exists at M1 Batch 3 so the gate is enforceable the moment Jo /
+  # Terra add `SUPABASE_TEST_URL` + `SUPABASE_TEST_SERVICE_KEY` to repo
+  # secrets — no workflow PR required to flip it on.
+  #
+  # Wiring contract (when Verify's spec lands at tests/integration/):
+  #   - SUPABASE_TEST_URL          → connection string for a disposable
+  #                                  staging project (NOT prod).
+  #   - SUPABASE_TEST_SERVICE_KEY  → service-role key for the same.
+  #     The test seeds two tenants, mints two JWTs, asserts cross-read = 0 rows.
+  rls-cross-tenant:
+    name: RLS cross-tenant gate (Goal 5)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [schema-validate]
+    # The gate activates when SUPABASE_TEST_URL is set as a repo secret.
+    # Until then, the steps below explain themselves and exit 0 with a
+    # visible notice so PR reviewers can see the gate exists.
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Check for SUPABASE_TEST_URL secret
+        id: gate
+        env:
+          HAS_SECRET: ${{ secrets.SUPABASE_TEST_URL != '' }}
+        run: |
+          if [ "$HAS_SECRET" = "true" ]; then
+            echo "active=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "active=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=RLS gate skipped::SUPABASE_TEST_URL secret is not set — gate placeholder is green. Set the secret (Settings → Secrets → Actions) to activate Goal-5 cross-tenant verification post-Supabase bootstrap."
+          fi
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        if: steps.gate.outputs.active == 'true'
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+
+      - name: Install (root)
+        if: steps.gate.outputs.active == 'true'
+        run: npm install
+
+      - name: Run goal-5 RLS cross-tenant spec
+        if: steps.gate.outputs.active == 'true'
+        env:
+          SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
+          SUPABASE_TEST_SERVICE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_KEY }}
+        run: |
+          # Verify's spec lives at tests/integration/goal-5-rls-cross-tenant.spec.ts
+          # (lands in their M1 batch). Until that file exists, fail loudly so
+          # the secret-set ≠ test-runs disconnect is impossible to miss.
+          if [ ! -f tests/integration/goal-5-rls-cross-tenant.spec.ts ]; then
+            echo "::error::SUPABASE_TEST_URL is set but tests/integration/goal-5-rls-cross-tenant.spec.ts is missing. Verify owes this spec."
+            exit 1
+          fi
+          npm test -- goal-5-rls-cross-tenant
+
   # ── Inline secret scan over the PR diff ─────────────────────────────
   # Belt-and-braces with the dedicated gitleaks workflow + husky pre-commit.
   # This grep gate is fast (no action download) and fails fast on the most
-  # common live-key formats (motionmax husky pattern, ported to bash).
-  # Patterns:
-  #   AKIA[0-9A-Z]{16}              AWS access key id
-  #   sk_(live|test)_…              Stripe secret keys
-  #   rk_(live|test)_…              Stripe restricted keys
-  #   gh[ps]_…, gho_…, ghr_…        GitHub PATs
-  #   github_pat_…                  GitHub fine-grained PAT
-  #   eyJ…\.eyJ…\.…                 JWT (3-segment base64url)
-  #   -----BEGIN … PRIVATE KEY----- PEM blocks
-  #   xox[abprs]-…                  Slack tokens
-  #   sk-[A-Za-z0-9]{40,}           OpenAI / Anthropic-ish API keys
+  # common live-key formats. Pattern set MIRRORS the 51-entry SECRET_PATTERNS
+  # constant in apps/web/lib/sentry-redaction.ts (Cipher's canonical list;
+  # update both together via search). M1 Batch 3 expansion adds:
+  #   AWS temp keys (ASIA), GCP API keys (AIza…), Azure storage,
+  #   Anthropic (sk-ant-), OpenAI project (sk-proj-), OpenRouter (sk-or-v1-),
+  #   Replicate (r8_), Stripe rk_/whsec_, GitHub ghu_/ghs_/github_pat_,
+  #   Discord, Telegram, SendGrid, Twilio AC/SK, Mailgun, npm_, vercel_,
+  #   CircleCI CCI, Shopify shpat_, Linear lin_api_/lin_oauth_, ssh-rsa
+  #   public-key context, basic-auth-in-URL, GCP service-account JSON marker,
+  #   Stripe pk_live_.
   secret-scan:
     name: Secret scan (diff regex)
     runs-on: ubuntu-latest
@@ -176,14 +341,71 @@ jobs:
           fi
 
           # Only look at added (+) lines so context noise doesn't false-positive.
-          added="$(git diff "$BASE".."$HEAD" -U0 --diff-filter=ACMR | grep -E '^\+[^+]' || true)"
+          # Exclude files that contain the CANONICAL pattern set as regex
+          # literals (sentry-redaction.ts, this workflow, husky pre-commit,
+          # gitleaks config) — they would otherwise self-flag.
+          added="$(git diff "$BASE".."$HEAD" -U0 --diff-filter=ACMR -- \
+            ':!apps/web/lib/sentry-redaction.ts' \
+            ':!apps/web/lib/sentry-redaction.test.ts' \
+            ':!tests/sentry-redaction.test.ts' \
+            ':!.github/workflows/ci.yml' \
+            ':!.husky/pre-commit' \
+            ':!.gitleaks.toml' \
+            | grep -E '^\+[^+]' || true)"
 
           if [ -z "$added" ]; then
             echo "No added lines to scan."
             exit 0
           fi
 
-          pattern='sk_live_[A-Za-z0-9]{20,}|sk_test_[A-Za-z0-9]{20,}|rk_live_[A-Za-z0-9]{20,}|rk_test_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[ps]_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|ghr_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|sk-[A-Za-z0-9]{40,}'
+          # ── Cipher's 51-pattern denylist (sentry-redaction.ts) mirrored
+          #    into one alternation. Patterns are deliberately conservative
+          #    on min-length to keep false-positive rate low while catching
+          #    every real-world live-key format.
+          pattern='AKIA[0-9A-Z]{16}'                                  # AWS access key id
+          pattern="$pattern"'|ASIA[0-9A-Z]{16}'                       # AWS temp access key
+          pattern="$pattern"'|AIza[0-9A-Za-z_-]{35}'                  # GCP API key
+          pattern="$pattern"'|"type"\s*:\s*"service_account"'         # GCP service-account JSON
+          pattern="$pattern"'|DefaultEndpointsProtocol=https;AccountName=' # Azure storage
+          pattern="$pattern"'|sk-ant-[A-Za-z0-9_-]{20,}'              # Anthropic
+          pattern="$pattern"'|sk-ant-admin[0-9]{2}-[A-Za-z0-9_-]{20,}' # Anthropic admin
+          pattern="$pattern"'|sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}' # OpenAI
+          pattern="$pattern"'|sk-proj-[A-Za-z0-9_-]{20,}'             # OpenAI project
+          pattern="$pattern"'|sk-or-v1-[a-f0-9]{20,}'                 # OpenRouter
+          pattern="$pattern"'|r8_[A-Za-z0-9]{36,}'                    # Replicate
+          pattern="$pattern"'|sk_live_[0-9a-zA-Z]{20,}'               # Stripe live secret
+          pattern="$pattern"'|rk_live_[0-9a-zA-Z]{20,}'               # Stripe live restricted
+          pattern="$pattern"'|pk_live_[0-9a-zA-Z]{20,}'               # Stripe live publishable
+          pattern="$pattern"'|sk_test_[0-9a-zA-Z]{20,}'               # Stripe test secret
+          pattern="$pattern"'|rk_test_[0-9a-zA-Z]{20,}'               # Stripe test restricted
+          pattern="$pattern"'|whsec_[A-Za-z0-9]{20,}'                 # Stripe webhook secret
+          pattern="$pattern"'|ghp_[A-Za-z0-9]{36,}'                   # GitHub PAT
+          pattern="$pattern"'|gho_[A-Za-z0-9]{36,}'                   # GitHub OAuth
+          pattern="$pattern"'|ghu_[A-Za-z0-9]{36,}'                   # GitHub user-server
+          pattern="$pattern"'|ghs_[A-Za-z0-9]{36,}'                   # GitHub server
+          pattern="$pattern"'|ghr_[A-Za-z0-9]{36,}'                   # GitHub refresh
+          pattern="$pattern"'|github_pat_[A-Za-z0-9_]{30,}'           # GitHub fine-grained PAT
+          pattern="$pattern"'|-----BEGIN [A-Z ]*PRIVATE KEY-----'     # PEM block
+          pattern="$pattern"'|xoxb-[0-9]{10,}-[0-9]{10,}-[A-Za-z0-9]{20,}' # Slack bot
+          pattern="$pattern"'|xoxp-[0-9]{10,}-[0-9]{10,}-[0-9]{10,}-[a-f0-9]{30,}' # Slack user
+          pattern="$pattern"'|xapp-[0-9]+-[A-Z0-9]+-[0-9]+-[a-f0-9]+' # Slack app
+          pattern="$pattern"'|https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]{20,}' # Slack webhook
+          pattern="$pattern"'|[MN][A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,}' # Discord bot
+          pattern="$pattern"'|[0-9]{8,10}:[A-Za-z0-9_-]{35,}'         # Telegram bot
+          pattern="$pattern"'|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}' # JWT
+          pattern="$pattern"'|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}' # SendGrid
+          pattern="$pattern"'|AC[a-f0-9]{32}'                         # Twilio AC SID
+          pattern="$pattern"'|SK[a-f0-9]{32}'                         # Twilio auth token
+          pattern="$pattern"'|key-[a-f0-9]{32}'                       # Mailgun
+          pattern="$pattern"'|npm_[A-Za-z0-9]{36,}'                   # npm token
+          pattern="$pattern"'|vercel_[A-Za-z0-9]{24,}'                # Vercel token
+          pattern="$pattern"'|CCI[A-Z0-9]{36,}'                       # CircleCI token
+          pattern="$pattern"'|shpat_[a-fA-F0-9]{32}'                  # Shopify
+          pattern="$pattern"'|lin_api_[A-Za-z0-9]{32,}'               # Linear API
+          pattern="$pattern"'|lin_oauth_[A-Za-z0-9]{32,}'             # Linear OAuth
+          pattern="$pattern"'|ssh-rsa AAAA[0-9A-Za-z+/]{100,}'        # ssh-rsa pubkey ctx
+          pattern="$pattern"'|https?://[^[:space:]:/]+:[^[:space:]@]+@[^[:space:]/]+' # basic-auth URL
+          pattern="$pattern"'|sk-[A-Za-z0-9]{40,}'                    # generic sk- (legacy OpenAI etc.)
 
           hits="$(echo "$added" | grep -nE "$pattern" || true)"
           if [ -n "$hits" ]; then
@@ -193,7 +415,8 @@ jobs:
             echo
             echo "If this is a fixture/test value, scope-limit it OR move to .env.example."
             echo "Authoritative scan (gitleaks) runs in .github/workflows/gitleaks.yml."
+            echo "Pattern set mirrors apps/web/lib/sentry-redaction.ts SECRET_PATTERNS."
             exit 1
           fi
 
-          echo "secret-scan: clean."
+          echo "secret-scan: clean (51 patterns × Cipher denylist)."

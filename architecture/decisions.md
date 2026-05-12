@@ -21,16 +21,17 @@
 
 **Options considered:**
 
-| Option | Pros | Cons |
-|---|---|---|
-| **A. `pg-boss` (Postgres-backed)** | Zero new infra (uses existing Supabase Postgres); SKIP LOCKED idempotency mature; RLS extends naturally to job tables (per-tenant); cost = $0 incremental; failure-domain consolidates with DB (one less thing to monitor); single-region matches MVP | Higher DB load (poll-driven); not ideal at 1000+ jobs/sec; lacks Redis-pubsub channels (we don't need them) |
-| **B. `graphile-worker` (also Postgres-backed)** | Same pros as A; arguably better cron support | Less battle-tested at production scale than pg-boss; smaller ecosystem |
-| **C. Redis BullMQ (managed Upstash)** | High throughput; native pubsub for low-latency dispatch; well-known tooling | NEW infra (Upstash account, vault entry, monitoring); ~$10–30/mo cost; second SLA to track; Realtime is on Postgres so RTT to Redis adds inter-service hops; RLS doesn't extend (per-tenant cap needs app-layer enforcement) |
-| **D. Supabase Queues (PGMQ-based, in beta as of 2026-05)** | Managed inside Supabase; tight integration | Beta product; vendor-coupling without escape hatch; not battle-tested |
+| Option                                                     | Pros                                                                                                                                                                                                                                                  | Cons                                                                                                                                                                                                                         |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A. `pg-boss` (Postgres-backed)**                         | Zero new infra (uses existing Supabase Postgres); SKIP LOCKED idempotency mature; RLS extends naturally to job tables (per-tenant); cost = $0 incremental; failure-domain consolidates with DB (one less thing to monitor); single-region matches MVP | Higher DB load (poll-driven); not ideal at 1000+ jobs/sec; lacks Redis-pubsub channels (we don't need them)                                                                                                                  |
+| **B. `graphile-worker` (also Postgres-backed)**            | Same pros as A; arguably better cron support                                                                                                                                                                                                          | Less battle-tested at production scale than pg-boss; smaller ecosystem                                                                                                                                                       |
+| **C. Redis BullMQ (managed Upstash)**                      | High throughput; native pubsub for low-latency dispatch; well-known tooling                                                                                                                                                                           | NEW infra (Upstash account, vault entry, monitoring); ~$10–30/mo cost; second SLA to track; Realtime is on Postgres so RTT to Redis adds inter-service hops; RLS doesn't extend (per-tenant cap needs app-layer enforcement) |
+| **D. Supabase Queues (PGMQ-based, in beta as of 2026-05)** | Managed inside Supabase; tight integration                                                                                                                                                                                                            | Beta product; vendor-coupling without escape hatch; not battle-tested                                                                                                                                                        |
 
 **Chosen: A — pg-boss.**
 
 **Rationale:**
+
 1. At MVP scale (target 25 paying customers in 60 days per PRD §15) the throughput ceiling for any Postgres-backed queue is **2–4 orders of magnitude above** projected load. We are not queue-bound for the next 12+ months.
 2. Failure-domain consolidation (system-diagram §6) — when Postgres is down, runs queue. When Redis is down AND Postgres is up, the Web App is half-healthy: hard to reason about, hard to surface honestly on `/status`.
 3. **RLS extension** (Atlas's lock-in): pg-boss job tables can have a `tenant_id` column and RLS policy `tenant_id = auth.tenant_id()`. Per-tenant queue depth caps become a SQL SELECT count — no app-layer race condition.
@@ -55,18 +56,19 @@
 
 **Options considered:**
 
-| Option | Sandbox primitives | Region match | Cost @ ~30 runs/day | Ops burden |
-|---|---|---|---|---|
-| **A. Railway (us-east)** | Rootless containers, custom Dockerfile, seccomp via Docker security-opt, egress via Cilium-equivalent + iptables in initContainer | us-east (Virginia DC; matches Supabase us-east-1 within ~5ms RTT) | ~$20/mo for 1 worker idle, scales to ~$80/mo at MVP load | Low — built-in observability, deploys from git |
-| **B. Render** | Same primitives | us-east available | Similar pricing | Similar |
-| **C. Fly.io** | Rootless **Firecracker microVMs** (stronger isolation than rootless containers) | iad region | ~$5/mo idle, $30/mo at load | Low; flyctl is solid |
-| **D. Cloudflare Containers** (in beta) | Limited seccomp customization; egress via Workers | Multi-region only (Cloudflare edge) | TBD | Beta — too immature |
-| **E. AWS Fargate** | Full primitive control | us-east-1 native | $30–60/mo | High — ECS/IAM/VPC overhead is hostile to a 4-person team |
-| **F. Self-hosted on a VPS (Hetzner/DigitalOcean)** | Full control | us-east available | $10–20/mo | Highest — patching, monitoring, backups all manual |
+| Option                                             | Sandbox primitives                                                                                                                | Region match                                                      | Cost @ ~30 runs/day                                      | Ops burden                                                |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| **A. Railway (us-east)**                           | Rootless containers, custom Dockerfile, seccomp via Docker security-opt, egress via Cilium-equivalent + iptables in initContainer | us-east (Virginia DC; matches Supabase us-east-1 within ~5ms RTT) | ~$20/mo for 1 worker idle, scales to ~$80/mo at MVP load | Low — built-in observability, deploys from git            |
+| **B. Render**                                      | Same primitives                                                                                                                   | us-east available                                                 | Similar pricing                                          | Similar                                                   |
+| **C. Fly.io**                                      | Rootless **Firecracker microVMs** (stronger isolation than rootless containers)                                                   | iad region                                                        | ~$5/mo idle, $30/mo at load                              | Low; flyctl is solid                                      |
+| **D. Cloudflare Containers** (in beta)             | Limited seccomp customization; egress via Workers                                                                                 | Multi-region only (Cloudflare edge)                               | TBD                                                      | Beta — too immature                                       |
+| **E. AWS Fargate**                                 | Full primitive control                                                                                                            | us-east-1 native                                                  | $30–60/mo                                                | High — ECS/IAM/VPC overhead is hostile to a 4-person team |
+| **F. Self-hosted on a VPS (Hetzner/DigitalOcean)** | Full control                                                                                                                      | us-east available                                                 | $10–20/mo                                                | Highest — patching, monitoring, backups all manual        |
 
 **Chosen: A — Railway us-east.** Defer Fly.io's Firecracker primitive as the V2 graduation host (matches PRD D8 phasing: "Firecracker microVM as V2 graduation gate after first clean pentest").
 
 **Rationale:**
+
 1. **Sandbox primitives:** Railway supports custom Dockerfiles with `security-opt no-new-privileges`, custom seccomp JSON, and network policy via sidecar. The PRD D8 spec is achievable on Railway.
 2. **Region match:** Railway us-east is in the same Virginia data center cluster as Supabase us-east-1 and Vercel iad1 — RTT < 5ms p50 for Realtime + DB writes during streaming AuditEvents. Critical for PRD §14.1 perf SLOs.
 3. **Cost:** at projected MVP load (25 customers × ~5 audits/mo = 125 runs/mo ≈ 4 runs/day), one always-on container @ $20/mo plus burst-scaling to 2–3 containers during peak is < $100/mo. Penny's unit economics ($29–249/mo SKU prices) absorb this comfortably.
@@ -115,20 +117,22 @@
 
 **Options considered (and rejected):**
 
-| Option | Why rejected |
-|---|---|
+| Option                                                         | Why rejected                                                                                                      |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | **B. Service-role key from runner** (the "just use this" path) | Bypasses RLS entirely; tenant isolation becomes app-layer concern; Atlas B2 blocker; PRD §13.5 explicitly forbids |
-| **C. Long-lived tenant JWT** (cached) | Replay attack window grows; revocation requires a deny-list; complexity for ~zero benefit |
-| **D. mTLS between runner and Supabase** | Supabase doesn't expose mTLS surface on the data plane; would require self-hosting |
-| **E. OAuth client-credentials grant** | Same JWT outcome with more ceremony |
+| **C. Long-lived tenant JWT** (cached)                          | Replay attack window grows; revocation requires a deny-list; complexity for ~zero benefit                         |
+| **D. mTLS between runner and Supabase**                        | Supabase doesn't expose mTLS surface on the data plane; would require self-hosting                                |
+| **E. OAuth client-credentials grant**                          | Same JWT outcome with more ceremony                                                                               |
 
 **Rationale:**
+
 1. **Atlas's B2 closure:** Atlas v0.2 named service-role-key-in-runner as a Blocker. This decision closes it by definition.
 2. **Audience binding** is the load-bearing part. Even if a runner JWT leaks, it works for one run_id only, in a 5-min window, and only for one tenant. Blast radius is minimal.
 3. **Refresh-on-heartbeat** avoids the "Comprehensive audit takes 45min but JWT expired at 5min" footgun without going to long-lived tokens.
 4. **Single point of minting** (an Edge Function) means we can audit-log every mint event for forensics. Mint logs land in `audit_logs` per PRD §14.3.
 
 **For Atlas to validate:** RLS policy for `findings`:
+
 ```sql
 CREATE POLICY findings_select ON findings FOR SELECT
   USING (
@@ -139,6 +143,7 @@ CREATE POLICY findings_select ON findings FOR SELECT
     )
   );
 ```
+
 Negative test in `tests/acceptance/integration/runner-jwt-cross-run.spec.ts`: a JWT minted for `run_A` cannot SELECT findings for `run_B` even within same tenant. **For Verify to add to M1 exit gate.**
 
 **Reversibility:** medium. Changing audience-binding pattern later requires re-issuing all RLS policies.
@@ -171,14 +176,15 @@ Negative test in `tests/acceptance/integration/runner-jwt-cross-run.spec.ts`: a 
 
 **Options considered (and rejected):**
 
-| Option | Why rejected |
-|---|---|
-| **B. Synchronous wait-on-webhook** (block until webhook arrives) | Blocks browser; bad UX during incident |
+| Option                                                                 | Why rejected                                                                                                           |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **B. Synchronous wait-on-webhook** (block until webhook arrives)       | Blocks browser; bad UX during incident                                                                                 |
 | **C. Optimistic UI** (just trust `cs_complete` and assume entitlement) | Webhook can fail (signature mismatch, dropped); customer gets entitlement they didn't pay for; reverse-charge headache |
-| **D. Poll Stripe directly forever** | Wastes Stripe API quota; not idempotent across browser refreshes |
-| **E. Server-Sent Events from webhook handler** | Adds infrastructure complexity for the ~1% case |
+| **D. Poll Stripe directly forever**                                    | Wastes Stripe API quota; not idempotent across browser refreshes                                                       |
+| **E. Server-Sent Events from webhook handler**                         | Adds infrastructure complexity for the ~1% case                                                                        |
 
 **Rationale:**
+
 1. **Bounded polling** (10 × 2s = 20s) handles the 99.9% case where webhook lands fast OR our reconcile-poll beats it.
 2. **Webhook handler is the source of truth** for long-running events (subscription updates, refunds, disputes). The reconcile endpoint exists ONLY for the immediate-post-checkout user moment.
 3. **Idempotency via `stripe_subscription_id`** as the upsert key means there is no race condition. Both code paths write the same row.
@@ -214,13 +220,14 @@ Negative test in `tests/acceptance/integration/runner-jwt-cross-run.spec.ts`: a 
 
 **Options considered (and rejected):**
 
-| Option | Why rejected |
-|---|---|
-| **B. Single `tenant:<id>` channel for all runs in a tenant** | Cross-pollutes events; customer with run A sees run B's progress; RLS-style scoping needs row-level not channel-level |
-| **C. WebSockets bypassing Realtime (direct from runner via SSE)** | Doubles infra surface; loses Realtime's built-in fan-out + RLS-aware filter |
-| **D. Poll-only (no websockets)** | Bad UX for live progress; doesn't meet PRD §7.2 Step C's streaming requirement |
+| Option                                                            | Why rejected                                                                                                          |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **B. Single `tenant:<id>` channel for all runs in a tenant**      | Cross-pollutes events; customer with run A sees run B's progress; RLS-style scoping needs row-level not channel-level |
+| **C. WebSockets bypassing Realtime (direct from runner via SSE)** | Doubles infra surface; loses Realtime's built-in fan-out + RLS-aware filter                                           |
+| **D. Poll-only (no websockets)**                                  | Bad UX for live progress; doesn't meet PRD §7.2 Step C's streaming requirement                                        |
 
 **Rationale:**
+
 1. **One channel per run** is the natural scope. RLS on the row → subscriber's JWT → Realtime's row-level subscribe filter enforces tenant isolation.
 2. **Replay from `runs.events_log`** (not from Realtime's buffer) is necessary anyway for cross-session resume (EC-2). The same primitive handles fan-out late-subscribers.
 3. **Admin mirroring channel** is one extra `pg_notify` per event — negligible. Keeps admin observability simple.
@@ -243,12 +250,12 @@ Negative test in `tests/acceptance/integration/runner-jwt-cross-run.spec.ts`: a 
 
 **State transitions:**
 
-| From → To | Trigger |
-|---|---|
-| `active` (initial) | row created |
-| `active → stale` | GitHub webhook `installation.deleted` arrives AND there's an open `fix_pr_jobs` row whose `github_installation_id` matches the uninstalled installation |
-| `stale → recovered` | GitHub webhook `installation.created` arrives AND existing `fix_pr_jobs.github_installation_id` matches |
-| `stale → stale` (no-op) | webhook for stale install arrives (idempotent) |
+| From → To               | Trigger                                                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `active` (initial)      | row created                                                                                                                                             |
+| `active → stale`        | GitHub webhook `installation.deleted` arrives AND there's an open `fix_pr_jobs` row whose `github_installation_id` matches the uninstalled installation |
+| `stale → recovered`     | GitHub webhook `installation.created` arrives AND existing `fix_pr_jobs.github_installation_id` matches                                                 |
+| `stale → stale` (no-op) | webhook for stale install arrives (idempotent)                                                                                                          |
 
 **UI consequences:**
 
@@ -260,18 +267,20 @@ Negative test in `tests/acceptance/integration/runner-jwt-cross-run.spec.ts`: a 
 
 **Options considered (and rejected):**
 
-| Option | Why rejected |
-|---|---|
-| **B. Long-lived OAuth grant for merge-status read-only** | Violates D1 (per-repo permissions only); blast radius of leaked token unacceptable |
+| Option                                                         | Why rejected                                                                             |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **B. Long-lived OAuth grant for merge-status read-only**       | Violates D1 (per-repo permissions only); blast radius of leaked token unacceptable       |
 | **C. Webhook deliveries via customer-installed GitHub Action** | Infra burden too high for MVP; deferred to V2 if Auto-PR attach rate > 15% (per PRD D23) |
-| **D. Periodic polling via GitHub API** | Hits rate limits at scale; wasteful; race condition with webhooks |
+| **D. Periodic polling via GitHub API**                         | Hits rate limits at scale; wasteful; race condition with webhooks                        |
 
 **Rationale:**
+
 1. **Honest UX wins.** Customer knows their data is stale; they have a one-click fix; we don't pretend we know things we don't.
 2. **Schema-as-files**: this column MUST exist at M0 even though Auto-PR is V1.5. Migrating the column in later means migrating production data; Atlas's PRD lessons-learned ("schemas-as-files, not schemas-as-prose") locks it in early.
 3. **Recovery is best-effort** by design. Per D1 blast-radius, we accept some informational gap as the price of permission minimalism.
 
 **For Atlas:** add columns in `architecture/database/migrations/0007_tracking_state.sql`:
+
 ```sql
 ALTER TABLE runs ADD COLUMN tracking_state text NOT NULL DEFAULT 'active'
   CHECK (tracking_state IN ('active','stale','recovered'));
@@ -315,19 +324,21 @@ ALTER TABLE fix_pr_jobs ADD COLUMN tracking_state text NOT NULL DEFAULT 'active'
 
 **Options considered (and rejected):**
 
-| Option | Why rejected |
-|---|---|
-| **B. Everything in Vercel** | Score-engine drift risk (runner has to duplicate the logic); BYOK dry-run leaks key to function logs; webhook handler not co-located with DB → atomic-write gap |
-| **C. Everything in Edge Functions** | Deno's ecosystem is narrower; Next.js cookies + Auth callbacks awkward in Deno; admin debugging is harder; ALL traffic goes through Supabase egress |
-| **D. Per-route case-by-case** (no rule) | Exactly the contradiction surfaced in system-diagram C1 — leads to drift |
+| Option                                  | Why rejected                                                                                                                                                    |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **B. Everything in Vercel**             | Score-engine drift risk (runner has to duplicate the logic); BYOK dry-run leaks key to function logs; webhook handler not co-located with DB → atomic-write gap |
+| **C. Everything in Edge Functions**     | Deno's ecosystem is narrower; Next.js cookies + Auth callbacks awkward in Deno; admin debugging is harder; ALL traffic goes through Supabase egress             |
+| **D. Per-route case-by-case** (no rule) | Exactly the contradiction surfaced in system-diagram C1 — leads to drift                                                                                        |
 
 **Rationale:**
+
 1. **Co-location matters for atomicity.** Webhook handlers MUST write to DB atomically with verification; Edge Fns are physically next to Postgres in us-east-1.
 2. **Score-engine single-source-of-truth** is non-negotiable per PRD §10 versioning convention. One Edge Fn loading one JSON file is the simplest possible implementation.
 3. **Cold start cost:** Edge Functions cold-start in ~50ms (Deno); Vercel Functions in ~200ms (Node). For our use, both are acceptable; the choice is by responsibility, not perf.
 4. **Debuggability:** Vercel's logs UI is superior for human debugging; Edge Fns logs go through Supabase dashboard. We keep the user-driven CRUD where humans look first.
 
 **For Forge:** the file boundary is enforced by directory structure:
+
 - `apps/web/app/api/**` — Vercel API routes
 - `supabase/functions/**` — Edge Functions
 
@@ -361,13 +372,14 @@ A CI lint rule (Verify-owned) rejects any Edge Function whose responsibility doe
 
 **Options considered (and rejected):**
 
-| Option | Why rejected |
-|---|---|
-| **B. Multi-region from MVP** | Adds 4+ weeks to M1; cost doubles; no EU customer demand validated yet |
-| **C. Self-host EU region on AWS direct** | Replaces Supabase's managed pieces; massive ops burden; not Studio Zero's core competency |
-| **D. CDN-only EU edge (no DB residency)** | Doesn't satisfy GDPR "data of EU residents stored within EU" interpretation |
+| Option                                    | Why rejected                                                                              |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **B. Multi-region from MVP**              | Adds 4+ weeks to M1; cost doubles; no EU customer demand validated yet                    |
+| **C. Self-host EU region on AWS direct**  | Replaces Supabase's managed pieces; massive ops burden; not Studio Zero's core competency |
+| **D. CDN-only EU edge (no DB residency)** | Doesn't satisfy GDPR "data of EU residents stored within EU" interpretation               |
 
 **Rationale:**
+
 1. **YAGNI for MVP:** US-only is honest, in line with PRD §14.4, and matches Stripe/Vercel/Supabase MVP setup patterns.
 2. **Pre-spec is cheap insurance:** writing this plan now (3 hrs of Axiom + Atlas + Comply time) prevents a 3-week emergency later.
 3. **Per-tenant routing** is the right primitive — keeps RLS untouched; only the DB-connection middleware changes.
@@ -385,11 +397,11 @@ A CI lint rule (Verify-owned) rejects any Edge Function whose responsibility doe
 
 ## Still open after ARCH-D8 (need cross-team sign-off, not Jo's call)
 
-- **ARCH-D9 (Shield + Cipher) — Egress allowlist enforcement primitive.** Surfaced in system-diagram §9 contradiction C7. DNS-only enforcement is leaky; Cilium NetworkPolicy + DNS combo is the current plan but the implementation primitive on Railway requires validation. Owner: Shield. Deadline: M1 exit gate.
+- **ARCH-D9 (Pipeline + Shield + Cipher) — Egress allowlist enforcement primitive. CLOSED (M1 Batch 3).** Layer-3 enforcement shipped via `architecture/iac/railway/network-policy.yaml` (Cilium CiliumNetworkPolicy v2): default-deny egress; FQDN allowlist for Anthropic, Supabase, GitHub, Sentry, PostHog, CoreDNS; CIDR egressDeny for RFC 1918, loopback, link-local (incl. AWS IMDS), ULA, IPv4-mapped IPv6 private. Layer-1 app-side filter shipped earlier via `apps/runner/src/ssrf-guard.ts` (Forge-2 commit 43779fb). M1+1 proxy layer (DNS pinning to cloud resolver + per-redirect re-validate + per-tenant rate limit) specced at `architecture/iac/railway/egress-proxy.md`. Originally surfaced in system-diagram §9 contradiction C7.
 - **ARCH-D10 (Atlas) — `cli_heartbeat` event in AuditEvent enum.** Surfaced in system-diagram §9 C3. Single contract for run-progress AND device-liveness vs separate channels. Owner: Atlas. Deadline: M3 exit gate (CLI launch).
 
 These are NOT blockers for Forge starting M0 scaffolding; they are layer-specific specs that Atlas/Shield/Cipher own and will land in their Phase-5 deliverables.
 
 ---
 
-*End of architecture decisions log v0.1. Axiom — Strategy Layer.*
+_End of architecture decisions log v0.1. Axiom — Strategy Layer._

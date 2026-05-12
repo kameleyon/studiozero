@@ -3,17 +3,29 @@
 # ──────────────────────────────────────────────────────────────────────
 # Order (fast → slow):
 #   1. Block staged .env / .envrc files outright (allow .env.example).
-#   2. Inline secret-scan over staged diff. Mirrors the regex set in
-#      ci.yml (secret-scan job) so local rejects match CI rejects.
-#      Pattern coverage:
-#        Stripe sk_/rk_ live/test keys
+#   2. Inline secret-scan over staged diff. Pattern set mirrors the
+#      CI workflow + the canonical SECRET_PATTERNS in
+#      apps/web/lib/sentry-redaction.ts (Cipher's 51-pattern denylist).
+#      Coverage extended at M1 Batch 3:
+#        AWS access (AKIA) + temp (ASIA)
+#        GCP API (AIza…) + service-account JSON marker
+#        Azure storage connection-string marker
+#        Anthropic (sk-ant-) + admin (sk-ant-admin)
+#        OpenAI (sk-…T3BlbkFJ) + project (sk-proj-)
+#        OpenRouter (sk-or-v1-) / Replicate (r8_)
+#        Stripe sk_/rk_/pk_ live + test + whsec_
+#        GitHub PATs ghp_/gho_/ghu_/ghs_/ghr_/github_pat_
+#        Slack xoxb-/xoxp-/xapp-/webhook
+#        Discord bot / Telegram bot
 #        JWTs (eyJ header.payload.signature, 3-segment base64url)
-#        AWS access keys (AKIA[0-9A-Z]{16})
-#        GitHub PATs (ghp_/gho_/ghs_/ghr_/github_pat_)
-#        Slack tokens (xoxb-/xoxa-/xoxp-/xoxs-/xoxr-)
-#        PEM-format private keys
-#        OpenAI / Anthropic-shaped sk- keys (≥40 chars)
-#   3. lint-staged (typecheck + eslint --fix on staged files).
+#        SendGrid SG. / Twilio AC/SK / Mailgun key-
+#        npm_ / vercel_ / CCI / shpat_ / lin_api_/lin_oauth_
+#        ssh-rsa pubkey context / basic-auth-in-URL
+#        PEM private-key markers
+#        Generic sk- ≥40 chars (legacy OpenAI / Anthropic-ish)
+#   3. lint-staged (typecheck + eslint --fix on staged files; now
+#      covers BOTH apps/web AND apps/runner per lint-staged.config.js
+#      M1 Batch 3 update).
 #   4. Conventional-commits hint (informational; commit-msg enforces).
 #
 # This is the local fast-path. The thorough scan runs in CI via
@@ -37,12 +49,63 @@ if [ -n "$staged_files" ]; then
 
   # ── 2. Regex scan staged content for secret-shaped strings ────────
   # Only look at added (+) lines — context noise produces false positives.
-  diff_added="$(git diff --cached -U0 --diff-filter=ACMR -- $staged_files 2>/dev/null | grep -E '^\+[^+]' || true)"
+  # Exclude files that carry the CANONICAL pattern set as regex literals.
+  diff_added="$(git diff --cached -U0 --diff-filter=ACMR -- \
+      ':!apps/web/lib/sentry-redaction.ts' \
+      ':!apps/web/lib/sentry-redaction.test.ts' \
+      ':!tests/sentry-redaction.test.ts' \
+      ':!.github/workflows/ci.yml' \
+      ':!.husky/pre-commit' \
+      ':!.gitleaks.toml' \
+      $staged_files 2>/dev/null \
+    | grep -E '^\+[^+]' || true)"
 
   if [ -n "$diff_added" ]; then
-    # Same pattern set as ci.yml secret-scan job. Tight enough to keep
-    # false-positive rate low.
-    pattern='sk_live_[A-Za-z0-9]{20,}|sk_test_[A-Za-z0-9]{20,}|rk_live_[A-Za-z0-9]{20,}|rk_test_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[ps]_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|ghr_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|sk-[A-Za-z0-9]{40,}'
+    # ── Cipher 51-pattern denylist (sentry-redaction.ts) mirrored ──
+    pattern='AKIA[0-9A-Z]{16}'
+    pattern="$pattern"'|ASIA[0-9A-Z]{16}'
+    pattern="$pattern"'|AIza[0-9A-Za-z_-]{35}'
+    pattern="$pattern"'|"type"\s*:\s*"service_account"'
+    pattern="$pattern"'|DefaultEndpointsProtocol=https;AccountName='
+    pattern="$pattern"'|sk-ant-[A-Za-z0-9_-]{20,}'
+    pattern="$pattern"'|sk-ant-admin[0-9]{2}-[A-Za-z0-9_-]{20,}'
+    pattern="$pattern"'|sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}'
+    pattern="$pattern"'|sk-proj-[A-Za-z0-9_-]{20,}'
+    pattern="$pattern"'|sk-or-v1-[a-f0-9]{20,}'
+    pattern="$pattern"'|r8_[A-Za-z0-9]{36,}'
+    pattern="$pattern"'|sk_live_[0-9a-zA-Z]{20,}'
+    pattern="$pattern"'|rk_live_[0-9a-zA-Z]{20,}'
+    pattern="$pattern"'|pk_live_[0-9a-zA-Z]{20,}'
+    pattern="$pattern"'|sk_test_[0-9a-zA-Z]{20,}'
+    pattern="$pattern"'|rk_test_[0-9a-zA-Z]{20,}'
+    pattern="$pattern"'|whsec_[A-Za-z0-9]{20,}'
+    pattern="$pattern"'|ghp_[A-Za-z0-9]{36,}'
+    pattern="$pattern"'|gho_[A-Za-z0-9]{36,}'
+    pattern="$pattern"'|ghu_[A-Za-z0-9]{36,}'
+    pattern="$pattern"'|ghs_[A-Za-z0-9]{36,}'
+    pattern="$pattern"'|ghr_[A-Za-z0-9]{36,}'
+    pattern="$pattern"'|github_pat_[A-Za-z0-9_]{30,}'
+    pattern="$pattern"'|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+    pattern="$pattern"'|xoxb-[0-9]{10,}-[0-9]{10,}-[A-Za-z0-9]{20,}'
+    pattern="$pattern"'|xoxp-[0-9]{10,}-[0-9]{10,}-[0-9]{10,}-[a-f0-9]{30,}'
+    pattern="$pattern"'|xapp-[0-9]+-[A-Z0-9]+-[0-9]+-[a-f0-9]+'
+    pattern="$pattern"'|https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]{20,}'
+    pattern="$pattern"'|[MN][A-Za-z0-9_-]{23}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,}'
+    pattern="$pattern"'|[0-9]{8,10}:[A-Za-z0-9_-]{35,}'
+    pattern="$pattern"'|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'
+    pattern="$pattern"'|SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}'
+    pattern="$pattern"'|AC[a-f0-9]{32}'
+    pattern="$pattern"'|SK[a-f0-9]{32}'
+    pattern="$pattern"'|key-[a-f0-9]{32}'
+    pattern="$pattern"'|npm_[A-Za-z0-9]{36,}'
+    pattern="$pattern"'|vercel_[A-Za-z0-9]{24,}'
+    pattern="$pattern"'|CCI[A-Z0-9]{36,}'
+    pattern="$pattern"'|shpat_[a-fA-F0-9]{32}'
+    pattern="$pattern"'|lin_api_[A-Za-z0-9]{32,}'
+    pattern="$pattern"'|lin_oauth_[A-Za-z0-9]{32,}'
+    pattern="$pattern"'|ssh-rsa AAAA[0-9A-Za-z+/]{100,}'
+    pattern="$pattern"'|https?://[^[:space:]:/]+:[^[:space:]@]+@[^[:space:]/]+'
+    pattern="$pattern"'|sk-[A-Za-z0-9]{40,}'
 
     hits="$(echo "$diff_added" | grep -nE "$pattern" || true)"
     if [ -n "$hits" ]; then
@@ -53,12 +116,15 @@ if [ -n "$staged_files" ]; then
       echo "  If this is fixture/test data, move it to .env.example or a"
       echo "  scoped fixtures/ path. The gitleaks workflow in CI will also"
       echo "  reject it; fix it here so the PR doesn't need a rewrite."
+      echo "  Pattern set mirrors apps/web/lib/sentry-redaction.ts SECRET_PATTERNS (51)."
       exit 1
     fi
   fi
 fi
 
 # ── 3. lint-staged (typecheck + eslint --fix on staged files) ──────
+# Covers BOTH apps/web AND apps/runner — see lint-staged.config.js
+# (M1 Batch 3 update).
 npx lint-staged
 
 # ── 4. Conventional-commits hint (informational) ───────────────────

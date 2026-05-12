@@ -4,9 +4,26 @@
 # "Security (SAST + dep CVE + secret scan)" — Dependabot is the dep-CVE
 # pillar of the M0 baseline.
 #
+# M1 Batch 3 update (Pipeline):
+#   - Added vendor-grouped buckets so a single PR rolls up all related
+#     packages instead of producing N separate PRs:
+#       * @supabase/*  → one PR per cycle (auth + ssr + supabase-js
+#                        move together; mismatched versions are a known
+#                        runtime footgun — keep them in lockstep).
+#       * @vitest/*    → one PR per cycle (coverage-v8 must match
+#                        vitest core; otherwise the runner can't load).
+#       * @types/*     → one PR per cycle (typings don't drift apart
+#                        from each other usefully; merge them as a set).
+#   - The `dependencies` label is attached to every PR so the
+#     branch-protection auto-merge gate (already set up at M0 via the
+#     repo settings → "Allow auto-merge" toggle + the `dependencies`
+#     label check) auto-merges minor + patch bumps that pass CI.
+#     Majors fall through to manual review by design.
+#
 # Ecosystems watched:
 #   - npm @ /             (root agent-system; node-fetch + tsx + tooling)
 #   - npm @ /apps/web     (Next.js 15 + React 19 + ESLint stack — Forge)
+#   - npm @ /apps/runner  (M1 Batch 2 — pg-boss + supabase-js worker)
 #   - github-actions @ /  (keeps SHA-pinned action versions current; auto
 #                          re-resolves SHA when a new tag drops, so we
 #                          don't manually chase CVEs in actions/* every Q)
@@ -14,101 +31,196 @@
 # Cadence: weekly Mondays 08:00 UTC. Security advisories bypass the
 # schedule (Dependabot fires immediately on a flagged CVE).
 #
-# Auto-merge: NOT enabled in this file (Dependabot YAML doesn't support
-# it natively). Configure via repo settings → General → "Allow auto-merge"
-# + branch protection requiring CI green; the `dependencies` label is
-# already attached for label-based gating downstream.
+# Auto-merge: Dependabot YAML doesn't natively merge — the gate lives
+# in repo Settings (M0 setup). This file's `labels:` block populates
+# the `dependencies` label that the auto-merge rule keys on. Minor +
+# patch with CI green → auto-merged. Majors → human review.
 # ─────────────────────────────────────────────────────────────────────
 
 version: 2
 
 updates:
   # ── Root: agent runner + tooling ──────────────────────────────────
-  - package-ecosystem: 'npm'
-    directory: '/'
+  - package-ecosystem: "npm"
+    directory: "/"
     schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '08:00'
-      timezone: 'Etc/UTC'
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
     open-pull-requests-limit: 5
     labels:
-      - 'dependencies'
-      - 'npm'
-      - 'root'
+      - "dependencies"
+      - "npm"
+      - "root"
     commit-message:
-      prefix: 'deps'
-      prefix-development: 'deps-dev'
-      include: 'scope'
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
     groups:
+      # Vitest family — coverage adapter version must match vitest core
+      # or the runner refuses to load. Keep them in lockstep.
+      vitest:
+        patterns:
+          - "@vitest/*"
+          - "vitest"
+        update-types:
+          - "minor"
+          - "patch"
+      # @types/* — type-only packages, no runtime risk.
+      types:
+        patterns:
+          - "@types/*"
+        update-types:
+          - "minor"
+          - "patch"
       # Group dev-dep minor/patch — usually safe, less churn.
       dev-deps:
-        dependency-type: 'development'
+        dependency-type: "development"
         update-types:
-          - 'minor'
-          - 'patch'
+          - "minor"
+          - "patch"
       prod-deps-patch:
-        dependency-type: 'production'
+        dependency-type: "production"
         update-types:
-          - 'patch'
+          - "patch"
 
   # ── apps/web: Next.js 15 + React 19 ───────────────────────────────
-  - package-ecosystem: 'npm'
-    directory: '/apps/web'
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
     schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '08:00'
-      timezone: 'Etc/UTC'
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
     open-pull-requests-limit: 5
     labels:
-      - 'dependencies'
-      - 'npm'
-      - 'apps-web'
+      - "dependencies"
+      - "npm"
+      - "apps-web"
     commit-message:
-      prefix: 'deps(web)'
-      prefix-development: 'deps-dev(web)'
-      include: 'scope'
+      prefix: "deps(web)"
+      prefix-development: "deps-dev(web)"
+      include: "scope"
     groups:
+      # Supabase family — auth + ssr + supabase-js move together.
+      # Skew between these is a documented runtime footgun (the SSR
+      # cookie helpers depend on supabase-js client internals that can
+      # drift across minor versions). Lockstep upgrades only.
+      supabase:
+        patterns:
+          - "@supabase/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # @types/* — co-version with their runtime libraries.
+      types:
+        patterns:
+          - "@types/*"
+        update-types:
+          - "minor"
+          - "patch"
+      # @vitest/* — coverage adapter must match vitest core (also at
+      # the root, but mirrored here in case web ever grows its own
+      # vitest install).
+      vitest:
+        patterns:
+          - "@vitest/*"
+          - "vitest"
+        update-types:
+          - "minor"
+          - "patch"
       web-dev-deps:
-        dependency-type: 'development'
+        dependency-type: "development"
         update-types:
-          - 'minor'
-          - 'patch'
+          - "minor"
+          - "patch"
       web-prod-deps-patch:
-        dependency-type: 'production'
+        dependency-type: "production"
         update-types:
-          - 'patch'
+          - "patch"
     ignore:
       # React + Next.js major bumps require coordinated work across
       # the app, ESLint config, and downstream deps. Take those manually.
-      - dependency-name: 'react'
-        update-types: ['version-update:semver-major']
-      - dependency-name: 'react-dom'
-        update-types: ['version-update:semver-major']
-      - dependency-name: 'next'
-        update-types: ['version-update:semver-major']
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+
+  # ── apps/runner: pg-boss + supabase-js worker (M1 Batch 2) ────────
+  - package-ecosystem: "npm"
+    directory: "/apps/runner"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+      - "apps-runner"
+    commit-message:
+      prefix: "deps(runner)"
+      prefix-development: "deps-dev(runner)"
+      include: "scope"
+    groups:
+      supabase:
+        patterns:
+          - "@supabase/*"
+        update-types:
+          - "minor"
+          - "patch"
+      types:
+        patterns:
+          - "@types/*"
+        update-types:
+          - "minor"
+          - "patch"
+      vitest:
+        patterns:
+          - "@vitest/*"
+          - "vitest"
+        update-types:
+          - "minor"
+          - "patch"
+      runner-dev-deps:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      runner-prod-deps-patch:
+        dependency-type: "production"
+        update-types:
+          - "patch"
+    ignore:
+      # pg-boss major bumps change the schema migration story —
+      # take manually after reviewing the upgrade guide.
+      - dependency-name: "pg-boss"
+        update-types: ["version-update:semver-major"]
 
   # ── GitHub Actions: keep SHA-pinned versions current ──────────────
   # All workflow files SHA-pin third-party actions. Dependabot for the
   # github-actions ecosystem opens PRs that bump both the comment-trailing
   # version AND the SHA, so we don't manually re-resolve every quarter.
-  - package-ecosystem: 'github-actions'
-    directory: '/'
+  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
-      interval: 'weekly'
-      day: 'monday'
-      time: '08:00'
-      timezone: 'Etc/UTC'
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
     open-pull-requests-limit: 5
     labels:
-      - 'dependencies'
-      - 'github-actions'
+      - "dependencies"
+      - "github-actions"
     commit-message:
-      prefix: 'ci'
-      include: 'scope'
+      prefix: "ci"
+      include: "scope"
     groups:
       actions-minor-patch:
         update-types:
-          - 'minor'
-          - 'patch'
+          - "minor"
+          - "patch"

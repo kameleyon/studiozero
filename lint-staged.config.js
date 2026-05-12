@@ -5,14 +5,21 @@
  * hook (`.husky/pre-commit`) runs `npx lint-staged`, which picks this
  * up.
  *
+ * M1 Batch 3 (Pipeline) update — wired `apps/runner` so Forge-2's
+ * worker code (commit 43779fb) gets the same pre-commit treatment as
+ * apps/web. `apps/runner` has no ESLint config yet (lint script is a
+ * stub per package.json), so we only typecheck on staged TS — the
+ * `tsc --noEmit` pass is project-scoped via the runner's tsconfig and
+ * catches the bug class that matters (type errors, broken imports).
+ * When Forge wires ESLint at M2, add the apps/runner ESLint clause
+ * symmetrically to apps/web.
+ *
  * Design notes:
- *   - apps/web/**\/*.{ts,tsx,css} → `cd apps/web && eslint --fix` so
- *     ESLint resolves apps/web's next/core-web-vitals config + its own
- *     tsconfig path mappings.
- *   - TS typecheck on staged files is intentionally NOT per-file (tsc
- *     can't honor a tsconfig project on a single-file scope without
- *     producing false errors). Instead, we run a fast project-scoped
- *     `tsc --noEmit` once when any TS/TSX is staged.
+ *   - apps/web/**\/*.{ts,tsx,css}    → `eslint --fix` via apps/web's
+ *                                       next/core-web-vitals config.
+ *   - apps/web/**\/*.{ts,tsx}        → single project-scoped `tsc --noEmit`.
+ *   - apps/runner/**\/*.ts           → single project-scoped `tsc --noEmit`
+ *                                       using apps/runner/tsconfig.json.
  *   - Prettier handles docs / config files (md / json / yml).
  *   - The inline secret-scan in `.husky/pre-commit` runs BEFORE
  *     lint-staged, so secrets fail fast before ESLint touches anything.
@@ -32,6 +39,12 @@ export default {
   // Returning a single command (not per-file) avoids tsc-bug noise where
   // a single-file invocation can't see the project graph.
   'apps/web/**/*.{ts,tsx}': [() => 'npm --prefix apps/web run typecheck'],
+
+  // ── apps/runner TS — project-scoped tsc pass (M1 Batch 3) ────────
+  // Forge-2's worker code lives here; no ESLint config yet so we only
+  // run `tsc --noEmit`. The `--prefix` form scopes Node module
+  // resolution to the runner's own tsconfig.json.
+  'apps/runner/**/*.ts': [() => 'npm --prefix apps/runner run typecheck'],
 
   // ── Root TS — incremental ESLint not yet configured at root.
   //    Typecheck the root if/when a root tsconfig + ts sources land.
