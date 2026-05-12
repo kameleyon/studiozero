@@ -231,6 +231,31 @@ export interface EventPropsMap {
     run_id: string;
     amount_cents: number;
   };
+  /** V1.5 Batch 1: re-audit gate PASS → PR opened. Wired in
+   *  `apps/runner/src/build/pr-opener.ts openAutoPr()` after the GH
+   *  pull-create call succeeds. */
+  auto_pr_opened: {
+    run_id: string;
+    fix_pr_job_id: string;
+    pr_number: number;
+    findings_in_pr: number;
+  };
+  /** V1.5 Batch 1: customer merged the PR. Wired in the GitHub
+   *  webhook handler `pull_request.merged` / `pull_request.closed`
+   *  events. */
+  auto_pr_merged: {
+    run_id: string;
+    fix_pr_job_id: string;
+    pr_number: number;
+  };
+  /** V1.5 Batch 1: customer closed the PR without merging. Wired in
+   *  the GitHub webhook handler for `pull_request.closed` where
+   *  `pull_request.merged === false`. */
+  auto_pr_closed_unmerged: {
+    run_id: string;
+    fix_pr_job_id: string;
+    pr_number: number;
+  };
 
   // -------- Compliance + lifecycle (consent-exempt subset) --------
   /** GDPR Art. 7(1) demonstrability — exempt from consent gate. */
@@ -489,6 +514,27 @@ export const EVENT_REGISTRY: readonly EventRegistryRow[] = [
     funnel_critical: false,
     fires_from:
       "apps/web/app/api/webhooks/stripe/route.ts — payment_intent.succeeded for auto-PR (V1.5)",
+    consent: "analytics",
+  },
+  {
+    name: "auto_pr_opened",
+    funnel_critical: false,
+    fires_from:
+      "apps/runner/src/build/pr-opener.ts openAutoPr() — after GH pull-create succeeds (V1.5)",
+    consent: "analytics",
+  },
+  {
+    name: "auto_pr_merged",
+    funnel_critical: false,
+    fires_from:
+      "apps/web/app/api/webhooks/github/route.ts — pull_request.merged (V1.5)",
+    consent: "analytics",
+  },
+  {
+    name: "auto_pr_closed_unmerged",
+    funnel_critical: false,
+    fires_from:
+      "apps/web/app/api/webhooks/github/route.ts — pull_request.closed where merged=false (V1.5)",
     consent: "analytics",
   },
 

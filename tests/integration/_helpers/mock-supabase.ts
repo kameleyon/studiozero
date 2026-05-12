@@ -247,6 +247,12 @@ export function makeMockSupabase(): MockSupabase {
     },
     update(patch: Record<string, unknown>) {
       const filters: FilterPredicate[] = [];
+      // V1.5 Batch 1 (Forge): the GitHub webhook handler chains
+      //   .update(patch).eq(...).like(...).select("...")
+      // to retrieve the updated rows. We extend the mock chain with
+      // `.like()` (records a filter so tests can assert on it) and
+      // `.select()` (returns a thenable that resolves to the most
+      // recently pushed read response, mirroring the real client).
       const chain: UpdateChain = {
         eq(col, val) {
           filters.push({ kind: "eq", col, val });
@@ -259,6 +265,27 @@ export function makeMockSupabase(): MockSupabase {
         is(col, val) {
           filters.push({ kind: "is", col, val });
           return chain;
+        },
+        like(col, val) {
+          filters.push({ kind: "filter", col, val });
+          return chain;
+        },
+        select(_cols) {
+          // Record the update on terminal access.
+          state.updates.push({ table, patch, filters });
+          const selectChain: {
+            then(
+              r: (v: { data: unknown[]; error: unknown }) => unknown,
+              j?: (e: unknown) => unknown,
+            ): Promise<unknown>;
+          } = {
+            then(resolve, reject) {
+              const row = popRead(table);
+              const data = row === null ? [] : Array.isArray(row) ? row : [row];
+              return Promise.resolve({ data, error: null }).then(resolve, reject);
+            },
+          };
+          return selectChain as never;
         },
         then(resolve, reject) {
           state.updates.push({ table, patch, filters });
@@ -321,6 +348,8 @@ interface UpdateChain {
   eq(col: string, val: unknown): UpdateChain;
   in(col: string, val: unknown[]): UpdateChain;
   is(col: string, val: unknown): UpdateChain;
+  like(col: string, val: unknown): UpdateChain;
+  select(cols: string): { then: (r: (v: { data: unknown[]; error: unknown }) => unknown, j?: (e: unknown) => unknown) => Promise<unknown> };
   then(resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown): Promise<unknown>;
 }
 

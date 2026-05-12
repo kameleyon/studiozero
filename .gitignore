@@ -14,6 +14,14 @@ build/
 .cache/
 .next/
 coverage/
+# V1.5 Forge: re-include the runner's build-agent source dir, which the
+# generic `build/` rule above would otherwise hide. These directories
+# contain TypeScript SOURCE for the Auto-PR build agents, not compiled
+# output (compiled output lives under apps/runner/dist/).
+!apps/runner/src/build/
+!apps/runner/src/build/**
+!apps/runner/tests/build/
+!apps/runner/tests/build/**
 
 # apps/web — Next.js build outputs
 apps/web/.next/
