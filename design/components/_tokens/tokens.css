@@ -50,7 +50,8 @@
   --verdict-pwf-frame: #5a3f1e;
   --verdict-pass: #14C8CC;
   --verdict-pass-frame: #3a3a40;
-  --verdict-on-fail: #f3f3f4;
+  /* M1-H2 fix — see apps/web/styles/tokens.css comment. AA at body size. */
+  --verdict-on-fail: #ffffff;
   --verdict-on-pwf: #050506;
   --verdict-on-pass: #050506;
 
@@ -63,7 +64,8 @@
   --sev-major-border: #4f4a1e;
   --sev-minor-text: #d4d4d6;
   --sev-minor-border: #3a3a40;
-  --sev-polish-text: #6b6b72;
+  /* M1-H2 fix — see apps/web/styles/tokens.css comment. AA at 11 px chip. */
+  --sev-polish-text: #9a9aa2;
   --sev-polish-border: #2a2a2f;
 
   /* ---------- Typography ---------- */

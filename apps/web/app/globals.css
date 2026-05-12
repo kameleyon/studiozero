@@ -1061,6 +1061,13 @@ main { position: relative; z-index: 2; }
   display: flex;
   flex-direction: column;
   background: var(--bg-0);
+  /* M1-H3 fix — kill the 166 px horizontal overflow at 320 px.
+     `min-width: 0` defeats the implicit min-content sizing that flex/grid
+     children otherwise inherit; `overflow-x: clip` keeps any stray wide
+     descendant (mono code blocks, file-path eyebrows) from pushing the
+     shell wider than the viewport. SC 1.4.10 Reflow. */
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .sz-app-header {
@@ -1143,36 +1150,50 @@ main { position: relative; z-index: 2; }
   font-size: var(--fs-mono-data);
 }
 
+/* M1-H3 fix — mobile-first grid. PRD §14.6 reflow per SC 1.4.10.
+   - <768 px:   single column. Sidebar hidden (Nav hamburger M2+1).
+   - 768-1279:  64 px icon-rail + 1fr.
+   - ≥1280 px:  240 px full sidebar + 1fr.
+   The previous max-width: 880 breakpoint left the sidebar at 64 px down
+   to 480 px and rendered the full 240 px sidebar at 320 px → 166 px
+   overflow. The mobile-first cascade below removes that overlap. */
 .sz-app-body {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 1fr;
   max-width: var(--wrap-max);
   width: 100%;
+  min-width: 0;
   margin: 0 auto;
 }
-@media (max-width: 880px) {
+@media (min-width: 768px) {
   .sz-app-body { grid-template-columns: 64px 1fr; }
 }
-@media (max-width: 480px) {
-  .sz-app-body { grid-template-columns: 1fr; }
+@media (min-width: 1280px) {
+  .sz-app-body { grid-template-columns: 240px 1fr; }
 }
 
 .sz-app-aside {
+  display: none;
   border-right: 1px solid var(--line-1);
   padding: var(--sp-24) var(--sp-12);
   position: sticky;
   top: var(--sticky-nav-h);
   align-self: start;
   height: calc(100vh - var(--sticky-nav-h));
+  min-width: 0;
+  overflow: hidden;
 }
-@media (max-width: 480px) {
-  .sz-app-aside { display: none; }
+@media (min-width: 768px) {
+  .sz-app-aside { display: block; }
 }
 
 .sz-app-main {
   padding: var(--sp-40) var(--wrap-pad-x);
   min-width: 0;
+  /* Wide mono code blocks / file-path eyebrows inside findings rows must
+     not push the main column wider than the grid track. M1-H3 reflow. */
+  overflow-x: hidden;
 }
 @media (max-width: 720px) {
   .sz-app-main { padding: var(--sp-24) var(--wrap-pad-x-mobile); }
@@ -1240,7 +1261,9 @@ main { position: relative; z-index: 2; }
   outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: var(--focus-offset);
 }
-@media (max-width: 880px) {
+/* M1-H3 — icon-only rail between 768 and 1279 px (full labels return at
+   the 1280 px breakpoint where the 240 px sidebar track is in play). */
+@media (max-width: 1279px) {
   .sz-sidebar__label {
     position: absolute;
     width: 1px; height: 1px;
@@ -1531,18 +1554,35 @@ main { position: relative; z-index: 2; }
 @media (max-width: 720px) { .sz-verdict-card { padding: var(--card-pad-mobile); } }
 .sz-verdict-card--fail {
   background: var(--verdict-fail);
-  color: var(--verdict-on-fail);
   border: 1px solid var(--verdict-fail-frame);
 }
 .sz-verdict-card--pass_with_fixes {
   background: var(--verdict-pwf);
-  color: var(--verdict-on-pwf);
   border: 1px solid var(--verdict-pwf-frame);
 }
 .sz-verdict-card--pass {
   background: var(--verdict-pass);
-  color: var(--verdict-on-pass);
   border: 1px solid var(--verdict-pass-frame);
+}
+/* M1-H2 fix — data-state cascade. Every text node inside the verdict card
+   inherits its on-surface color from this selector. Specificity (0,2,0) on
+   the parent wraps `.sz-app-main p` (0,1,1) via `currentColor` inheritance
+   AND we also stamp `color` directly on the score/body/actions so the
+   global `.sz-app-main p { color: --ink-1 }` no longer wins. Tokens are
+   the Direction A v0.1.1 verdict-on-* lock. */
+.sz-verdict-card[data-state="fail"] { color: var(--verdict-on-fail); }
+.sz-verdict-card[data-state="pass-with-fixes"] { color: var(--verdict-on-pwf); }
+.sz-verdict-card[data-state="pass"] { color: var(--verdict-on-pass); }
+
+/* Force every descendant text node to the on-surface color. Specificity
+   (0,2,1) on each element-typed selector beats `.sz-app-main p` (0,1,1)
+   and `.sz-card` chains. */
+.sz-verdict-card[data-state] .sz-verdict-card__h1,
+.sz-verdict-card[data-state] .sz-verdict-card__score,
+.sz-verdict-card[data-state] .sz-verdict-card__body p,
+.sz-verdict-card[data-state] .sz-verdict-card__score strong,
+.sz-verdict-card[data-state] .sz-verdict-card__h1 strong {
+  color: currentColor;
 }
 .sz-verdict-card__head {
   display: flex;
@@ -1561,7 +1601,6 @@ main { position: relative; z-index: 2; }
   font-size: var(--fs-display-m);
   line-height: var(--lh-h2);
   font-weight: 500;
-  color: currentColor;
   margin: 0;
   letter-spacing: -0.022em;
 }
@@ -1572,7 +1611,6 @@ main { position: relative; z-index: 2; }
 .sz-verdict-card__score {
   font-family: var(--font-mono);
   font-size: var(--fs-body-lg);
-  color: currentColor;
   margin: 0;
 }
 .sz-verdict-card__score strong {
@@ -1582,7 +1620,6 @@ main { position: relative; z-index: 2; }
   line-height: 1;
 }
 .sz-verdict-card__body p {
-  color: currentColor;
   font-size: var(--fs-body-lg);
   line-height: var(--lh-body-lg);
   margin-bottom: var(--sp-12);
@@ -1594,18 +1631,42 @@ main { position: relative; z-index: 2; }
 }
 /* CTAs inside verdict card use neutral surfaces so they remain WCAG AA
    against the colored backgrounds. */
-.sz-verdict-card--fail .sz-btn--primary,
-.sz-verdict-card--pass_with_fixes .sz-btn--primary,
-.sz-verdict-card--pass .sz-btn--primary {
+.sz-verdict-card[data-state] .sz-btn--primary {
   background: var(--bg-0);
   color: var(--ink-0);
+  border-color: var(--bg-0);
 }
-.sz-verdict-card--fail .sz-btn--ghost,
-.sz-verdict-card--pass_with_fixes .sz-btn--ghost,
-.sz-verdict-card--pass .sz-btn--ghost {
+/* M1-H2 — ghost button on verdict-card bg uses the on-surface token
+   explicitly (not `currentColor`) so the rule has the specificity
+   (0,2,1) needed to beat `.sz-btn--ghost { color: --ink-1 }` (0,1,0). */
+.sz-verdict-card[data-state="fail"] .sz-btn--ghost {
+  color: var(--verdict-on-fail);
+  border-color: var(--verdict-on-fail);
+  background: transparent;
+}
+.sz-verdict-card[data-state="pass-with-fixes"] .sz-btn--ghost {
+  color: var(--verdict-on-pwf);
+  border-color: var(--verdict-on-pwf);
+  background: transparent;
+}
+.sz-verdict-card[data-state="pass"] .sz-btn--ghost {
+  color: var(--verdict-on-pass);
+  border-color: var(--verdict-on-pass);
+  background: transparent;
+}
+/* Ghost-button hover overrides on coloured surfaces — keep the on-surface
+   contrast on hover instead of dropping to --ink-0/ink-2 (which can fail
+   on PASS WITH FIXES gold + PASS aqua). */
+.sz-verdict-card[data-state="fail"] .sz-btn--ghost:hover {
+  background: rgba(243, 243, 244, 0.12);
+  color: var(--verdict-on-fail);
+  border-color: var(--verdict-on-fail);
+}
+.sz-verdict-card[data-state="pass-with-fixes"] .sz-btn--ghost:hover,
+.sz-verdict-card[data-state="pass"] .sz-btn--ghost:hover {
+  background: rgba(5, 5, 6, 0.10);
   color: currentColor;
   border-color: currentColor;
-  background: transparent;
 }
 .sz-verdict-card__free-tier { margin-top: var(--sp-8); }
 .sz-verdict-card__watermark { margin-top: var(--sp-4); }
@@ -1685,7 +1746,8 @@ main { position: relative; z-index: 2; }
   font-size: var(--fs-mono-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  /* M1-H2 — count chip at 11 px is body-size; --ink-3 fails 4.5:1. */
+  color: var(--ink-2);
   margin-left: var(--sp-6);
 }
 .sz-findings-row {
@@ -1727,7 +1789,9 @@ main { position: relative; z-index: 2; }
 .sz-findings-row__id {
   font-family: var(--font-mono);
   font-size: var(--fs-mono-data);
-  color: var(--ink-3);
+  /* M1-H2 — was --ink-3 (#6b6b72) → 3.74:1 on bg-1 — fails SC 1.4.3 at
+     12 px body size. --ink-2 (#9a9aa2) → 6.8:1 passes AA. */
+  color: var(--ink-2);
 }
 .sz-findings-row__title { flex: 1 1 auto; color: var(--ink-0); }
 .sz-findings-row__chevron { color: var(--ink-2); }
@@ -1759,6 +1823,10 @@ main { position: relative; z-index: 2; }
   padding: 1px 6px;
   border-radius: 4px;
   color: var(--ink-0);
+  /* M1-H3 — long file paths must wrap inside narrow viewports rather
+     than push the row beyond the grid track. SC 1.4.10. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .sz-findings-row__actions {
   display: flex;
@@ -1769,7 +1837,8 @@ main { position: relative; z-index: 2; }
   border-top: 1px solid var(--line-1);
   position: relative;
 }
-.sz-findings-row__meta { color: var(--ink-3); margin-left: auto; }
+/* M1-H2 — was --ink-3 → 3.74:1 on bg-1 (fails SC 1.4.3 at 11 px). */
+.sz-findings-row__meta { color: var(--ink-2); margin-left: auto; }
 .sz-mono-meta {
   font-family: var(--font-mono);
   font-size: var(--fs-mono-meta);
@@ -1954,11 +2023,13 @@ main { position: relative; z-index: 2; }
 }
 .sz-auth-card p { color: var(--ink-1); margin-bottom: var(--sp-16); }
 .sz-auth-oauth { display: flex; gap: var(--sp-10); flex-wrap: wrap; margin-bottom: var(--sp-20); }
+/* M1-H1 fix — divider text + rules use --ink-2 (#9a9aa2) → 6.8:1 on bg-1.
+   Previous --ink-3 (#6b6b72) gave 3.74:1 and failed SC 1.4.3 (Halo Jury M1). */
 .sz-auth-divider {
   display: flex;
   align-items: center;
   gap: var(--sp-12);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--fs-mono-meta);
   letter-spacing: 0.08em;
@@ -1969,7 +2040,7 @@ main { position: relative; z-index: 2; }
 .sz-auth-divider::after {
   content: "";
   flex: 1 1 auto;
-  border-top: 1px solid var(--line-1);
+  border-top: 1px solid var(--ink-2);
 }
 .sz-auth-card .sz-form { gap: var(--sp-16); }
 .sz-auth-card .sz-btn { width: 100%; justify-content: center; }

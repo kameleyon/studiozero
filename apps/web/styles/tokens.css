@@ -50,7 +50,11 @@
   --verdict-pwf-frame: #5a3f1e;
   --verdict-pass: #14C8CC;
   --verdict-pass-frame: #3a3a40;
-  --verdict-on-fail: #f3f3f4;
+  /* M1-H2 fix — verdict-on-fail bumped from #f3f3f4 (4.45:1 on #C8421A, fails
+     SC 1.4.3 at body size) to #ffffff (4.87:1, AA pass at small text size).
+     Direction A v0.1.1 lock honored at the token-value level (no new
+     token, no new hex outside tokens.css). Halo M1 Jury audit M1-H2. */
+  --verdict-on-fail: #ffffff;
   --verdict-on-pwf: #050506;
   --verdict-on-pass: #050506;
 
@@ -63,7 +67,10 @@
   --sev-major-border: #4f4a1e;
   --sev-minor-text: #d4d4d6;
   --sev-minor-border: #3a3a40;
-  --sev-polish-text: #6b6b72;
+  /* M1-H2 — was #6b6b72 → 3.41:1 on bg-3 chip surface (fails SC 1.4.3 at
+     11 px). Bumped to #9a9aa2 to clear AA. Polish remains the muted-most
+     tier visually because all other severity-text tokens are warm/bright. */
+  --sev-polish-text: #9a9aa2;
   --sev-polish-border: #2a2a2f;
 
   /* ---------- Typography ---------- */

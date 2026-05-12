@@ -88,9 +88,20 @@ export function VerdictCard({
   freeTierChip,
   watermark,
 }: VerdictCardProps): React.ReactElement {
+  // M1-H2 fix — data-state attribute drives the on-surface color cascade
+  // (verdict-on-fail / -on-pwf / -on-pass). The legacy modifier class is
+  // kept so existing background/border rules keep matching, but every
+  // text color now keys off [data-state] for cascade specificity that
+  // beats the global `.sz-app-main p` rule (which previously clobbered
+  // body copy back to --ink-1 — the 25-violation FAIL contrast bug).
+  const stateAttr =
+    verdict === "PASS_WITH_FIXES"
+      ? "pass-with-fixes"
+      : verdict.toLowerCase();
   return (
     <section
       className={`sz-verdict-card sz-verdict-card--${verdict.toLowerCase()}`}
+      data-state={stateAttr}
       aria-labelledby="sz-verdict-h1"
     >
       <div className="sz-verdict-card__head">
