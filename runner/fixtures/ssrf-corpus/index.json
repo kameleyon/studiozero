@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "corpus": "ssrf",
+  "version": "1.0.0",
+  "milestone": "M1",
+  "min_size_m1": 30,
+  "min_size_m2": 100,
+  "owner": "shield",
+  "threat_model_ref": "architecture/threat-model.md §3.1",
+  "trust_boundary_ref": ["TB-6"],
+  "consumer_test": "tests/security/ssrf-egress.spec.ts",
+  "notes": "Each pattern represents a URL submitted to the Surface-audit headless browser. Defense layers (in order): (1) scheme allowlist (https://-only); (2) DNS resolve-and-pin to defeat rebinding; (3) IP blocklist after resolution (RFC1918, loopback, link-local, multicast, ULA, reserved, IPv4-mapped IPv6); (4) decimal/octal/hex URL normalization; (5) every redirect re-runs the full validation; (6) Cilium NetworkPolicy egress allowlist as belt-and-suspenders (ARCH-D9, M1 critical path). Expected: rejected at the FILTER (gateway 4xx with body 'ssrf_blocked'), not at the OS — so the test asserts no socket() syscall ever issues to the blocked IP.",
+  "patterns": [
+    {
+      "id": "SSRF-001",
+      "category": "aws_metadata",
+      "pattern": "http://169.254.169.254/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: scheme is http://, link-local IP 169.254.169.254 is in the blocklist. Returns 400 { error: 'ssrf_blocked', reason: 'link_local_ip' }.",
+      "notes": "AWS EC2 IMDS endpoint. Canonical SSRF target. The 2019 Capital One breach (CVE-2019-15598 related) exfiltrated 100M records via this exact IP. IMDSv2 (token-required) is a defense-in-depth mitigation, but our filter blocks before the request issues."
+    },
+    {
+      "id": "SSRF-002",
+      "category": "aws_metadata",
+      "pattern": "http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects on link-local IP. Matches SSRF-1 in threat-model.md §3.1.",
+      "notes": "The full path that, if reachable, returns the runner instance's IAM role credentials. Capital One breach root cause."
+    },
+    {
+      "id": "SSRF-003",
+      "category": "aws_metadata",
+      "pattern": "https://169.254.169.254/latest/api/token",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects on link-local IP — scheme is allowed (https) but IP blocklist still applies.",
+      "notes": "IMDSv2 token endpoint. https-scheme alone is insufficient — the IP check is what fires."
+    },
+    {
+      "id": "SSRF-004",
+      "category": "aws_metadata",
+      "pattern": "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: hostname resolves to 169.254.169.254 (GCP convention); post-resolution IP check fires.",
+      "notes": "GCP metadata endpoint. The hostname is non-obvious but DNS resolves to the same link-local IP. Resolve-and-check is the catch."
+    },
+    {
+      "id": "SSRF-005",
+      "category": "aws_metadata",
+      "pattern": "http://[fd00:ec2::254]/latest/meta-data/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: fd00::/8 is ULA (unique local address) per RFC 4193, in the blocklist.",
+      "notes": "AWS IPv6 IMDS endpoint (released 2021). Often forgotten by IPv4-only SSRF filters."
+    },
+    {
+      "id": "SSRF-006",
+      "category": "localhost",
+      "pattern": "http://localhost:5432",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: 'localhost' resolves to 127.0.0.1, in the loopback /8 blocklist.",
+      "notes": "Postgres port on the runner host. SSRF-2 in threat-model.md §3.1."
+    },
+    {
+      "id": "SSRF-007",
+      "category": "localhost",
+      "pattern": "http://127.0.0.1:5432",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: 127.0.0.1 is in 127.0.0.0/8 (loopback).",
+      "notes": "Direct loopback. Trivial but essential coverage."
+    },
+    {
+      "id": "SSRF-008",
+      "category": "localhost",
+      "pattern": "http://[::1]:5432",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: ::1 is IPv6 loopback.",
+      "notes": "IPv6 loopback. SSRF-7 in threat-model.md §3.1."
+    },
+    {
+      "id": "SSRF-009",
+      "category": "localhost",
+      "pattern": "http://0.0.0.0:5432",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: 0.0.0.0/8 is in the reserved blocklist; on Linux 0.0.0.0 also routes to localhost.",
+      "notes": "0.0.0.0 is a Linux quirk that routes to loopback. Documented bypass against naive 127.0.0.1-only filters."
+    },
+    {
+      "id": "SSRF-010",
+      "category": "rfc1918",
+      "pattern": "http://10.0.0.1/admin",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: 10.0.0.0/8 is RFC 1918 private space.",
+      "notes": "RFC 1918 10/8 — typical corporate / VPC internal range."
+    },
+    {
+      "id": "SSRF-011",
+      "category": "rfc1918",
+      "pattern": "http://10.255.255.254/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: 10/8 blocklist.",
+      "notes": "Edge of 10/8 range — verifies the full /8 is blocked, not just 10.0.0.0/24."
+    },
+    {
+      "id": "SSRF-012",
+      "category": "rfc1918",
+      "pattern": "http://172.16.0.1/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: 172.16.0.0/12 is RFC 1918 private space.",
+      "notes": "RFC 1918 172.16/12. The /12 is wider than the obvious 172.16/16 — must catch 172.16.0.0 through 172.31.255.255."
+    },
+    {
+      "id": "SSRF-013",
+      "category": "rfc1918",
+      "pattern": "http://172.31.255.254/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: 172.16.0.0/12 blocklist.",
+      "notes": "Upper edge of 172.16/12. Naive filters that block only '172.16.*' miss this."
+    },
+    {
+      "id": "SSRF-014",
+      "category": "rfc1918",
+      "pattern": "http://192.168.1.1/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: 192.168.0.0/16 RFC 1918.",
+      "notes": "Classic home-router range."
+    },
+    {
+      "id": "SSRF-015",
+      "category": "rfc1918",
+      "pattern": "http://192.168.255.255/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: 192.168/16 blocklist.",
+      "notes": "Edge of 192.168/16."
+    },
+    {
+      "id": "SSRF-016",
+      "category": "file_scheme",
+      "pattern": "file:///etc/passwd",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects at the scheme allowlist (https-only). Headless browser is launched with --disable-features=AllowFileAccessFromFiles.",
+      "notes": "SSRF-3 in threat-model.md §3.1. Chromium's behavior around file:// in headless mode was the cause of CVE-2018-6149."
+    },
+    {
+      "id": "SSRF-017",
+      "category": "file_scheme",
+      "pattern": "file://localhost/c:/windows/system32/drivers/etc/hosts",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects at the scheme allowlist.",
+      "notes": "Windows UNC-style file:// URL. Covered by scheme allowlist but worth explicit corpus entry for the Windows-runner future case."
+    },
+    {
+      "id": "SSRF-018",
+      "category": "gopher_scheme",
+      "pattern": "gopher://localhost:6379/_INFO%0A",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects at the scheme allowlist.",
+      "notes": "SSRF-4 in threat-model.md §3.1. Gopher-to-Redis is the classic 'redis-poke' exploit (Orange Tsai's BlackHat 2017 'A New Era of SSRF' talk). The gopher scheme lets you craft arbitrary line-delimited protocols including Redis, memcached, and SMTP."
+    },
+    {
+      "id": "SSRF-019",
+      "category": "gopher_scheme",
+      "pattern": "gopher://internal-redis.svc.cluster.local:6379/_FLUSHALL%0AQUIT",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects at the scheme allowlist; additionally, hostname resolution would target an internal Kubernetes service (SSRF-8 in threat-model).",
+      "notes": "Gopher targeting Kubernetes service-discovery DNS. Double defense — scheme + hostname pattern."
+    },
+    {
+      "id": "SSRF-020",
+      "category": "dns_rebinding",
+      "pattern": "http://rebind-victim.attacker.example.com/admin",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: the custom DNS resolver in the headless browser pins the IP at validate-time (resolve-once), so a rebinding response that flips to 169.254.169.254 at fetch-time is irrelevant — the browser uses the pinned IP. Even if the pinned IP is public, the IP-blocklist re-check on every redirect catches a redirect to a private IP.",
+      "notes": "SSRF-6 in threat-model.md §3.1. DNS rebinding is the classic Singularity-of-Origin attack (Pearce 2018). The 'attacker.example.com' is a placeholder for the canonical https://rebind.network/ test harness."
+    },
+    {
+      "id": "SSRF-021",
+      "category": "dns_rebinding",
+      "pattern": "http://7f000001.attacker.example.com/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects on resolve: depending on the attacker's NS, this may resolve to 127.0.0.1 (loopback) on first lookup, which the post-resolution IP check catches.",
+      "notes": "Wildcard-subdomain pointing to 127.0.0.1 — the 'rebinder' service hosted at sslip.io / nip.io style domains. Real-world variant."
+    },
+    {
+      "id": "SSRF-022",
+      "category": "ip_encoding",
+      "pattern": "http://2130706433/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: decimal-encoded IP 2130706433 is normalized to 127.0.0.1, which is in the loopback /8 blocklist.",
+      "notes": "Decimal IP encoding. SSRF-7 in threat-model.md §3.1. The Node.js URL parser (WHATWG) DOES normalize decimal IPs in some contexts but inconsistently — explicit normalization in the filter is required."
+    },
+    {
+      "id": "SSRF-023",
+      "category": "ip_encoding",
+      "pattern": "http://0x7f000001/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: hex IP 0x7f000001 normalizes to 127.0.0.1.",
+      "notes": "Hex IP encoding. Documented bypass against rust-url and net-parse implementations historically."
+    },
+    {
+      "id": "SSRF-024",
+      "category": "ip_encoding",
+      "pattern": "http://017700000001/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: octal IP 017700000001 normalizes to 127.0.0.1.",
+      "notes": "Octal IP encoding. CVE-2021-29923 in Go's net package — leading-zero octal IPs were treated as decimal in some net.ParseIP code paths. Filter must apply normalization before blocklist check."
+    },
+    {
+      "id": "SSRF-025",
+      "category": "redirect_chain",
+      "pattern": "https://safe-public-redirector.example.com/r?to=http://169.254.169.254/latest/meta-data/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects on redirect-hop: the initial fetch returns 302 Location: http://169.254.169.254/...; the filter re-runs scheme + IP-blocklist validation on the Location header BEFORE following. SSRF-5 in threat-model.md §3.1.",
+      "notes": "Open-redirector chained into metadata. Canonical bypass against naive 'I only check the initial URL' filters. The Capital One breach used this exact pattern via a misconfigured proxy."
+    },
+    {
+      "id": "SSRF-026",
+      "category": "redirect_chain",
+      "pattern": "https://bit.ly/3xampleVictim",
+      "expected_action": "block",
+      "expected_outcome": "Filter follows the shortener redirect (allowed: bit.ly is public, https, public IP) and re-validates the Location URL. If the shortener's target is a private IP / metadata / non-https URL, filter blocks at hop 2.",
+      "notes": "URL-shortener redirect chain. Filter must inspect every hop, not just the first. Real-world incident: 2022 Travis CI Snyk advisory where shorteners bypassed allowlists."
+    },
+    {
+      "id": "SSRF-027",
+      "category": "redirect_chain",
+      "pattern": "https://attacker.example.com/30x-chain?hops=10&final=http://10.0.0.1/",
+      "expected_action": "block",
+      "expected_outcome": "Filter terminates the chain at hop 5 (max-redirects cap, per audit-run-state-machine EC) AND re-validates IP at every hop. Hop 11 would route to 10.0.0.1 (RFC 1918) — blocked.",
+      "notes": "Long redirect chain designed to exhaust naive 'first 3 hops only' validators. The 5-hop cap is the deeper defense; each hop's IP check is the primary catch."
+    },
+    {
+      "id": "SSRF-028",
+      "category": "ipv6_mapped",
+      "pattern": "http://[::ffff:127.0.0.1]/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: ::ffff:0:0/96 (IPv4-mapped IPv6) is in the blocklist and the embedded 127.0.0.1 is loopback. SSRF-7 IPv6-form-of-private in threat-model.md §3.1.",
+      "notes": "IPv4-mapped IPv6 — a real bypass against IPv4-only loopback filters in older OkHttp / curl wrappers (CVE-2021-26937 reference)."
+    },
+    {
+      "id": "SSRF-029",
+      "category": "ipv6_mapped",
+      "pattern": "http://[::ffff:a9fe:a9fe]/latest/meta-data/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: ::ffff:a9fe:a9fe is the IPv6-mapped form of 169.254.169.254 (AWS metadata).",
+      "notes": "IPv4-mapped IPv6 wrapping the AWS metadata IP. The 'a9fe:a9fe' hex is 169.254.169.254. Catches filters that block the decimal form but not the IPv6-mapped form."
+    },
+    {
+      "id": "SSRF-030",
+      "category": "kubernetes",
+      "pattern": "http://kubernetes.default.svc.cluster.local/api/v1/secrets",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: (a) DNS resolution targets the in-cluster ClusterIP (typically 10.96.0.1 — RFC 1918); (b) the .cluster.local TLD is in the explicit hostname blocklist as defense in depth.",
+      "notes": "SSRF-8 in threat-model.md §3.1. Kubernetes service-discovery DNS. The 2019 Tesla Kubernetes breach used this exact pattern against an exposed dashboard."
+    },
+    {
+      "id": "SSRF-031",
+      "category": "kubernetes",
+      "pattern": "http://kube-apiserver.kube-system.svc.cluster.local:6443/api/v1/namespaces/default/secrets",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects on hostname pattern (.svc.cluster.local) AND on post-resolution RFC 1918 IP.",
+      "notes": "Targeting the API server directly — would yield cluster-wide secret read if any token was present. The filter blocks at the hostname; defense-in-depth blocks at the IP."
+    },
+    {
+      "id": "SSRF-032",
+      "category": "reserved",
+      "pattern": "http://100.64.0.1/",
+      "expected_action": "block",
+      "expected_outcome": "Filter rejects: 100.64.0.0/10 is RFC 6598 carrier-grade NAT space, in the reserved blocklist.",
+      "notes": "Carrier-grade NAT range — used by ISPs and some cloud VPCs. Forgotten by RFC1918-only filters. Real-world abuse: 2023 OVH internal-fabric SSRF advisory."
+    }
+  ]
+}

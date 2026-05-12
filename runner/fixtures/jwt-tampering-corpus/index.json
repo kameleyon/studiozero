@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "corpus": "jwt-tampering",
+  "version": "1.0.0",
+  "milestone": "M1",
+  "min_size_m1": 30,
+  "owner": "shield",
+  "co_owner": "atlas",
+  "threat_model_ref": "architecture/threat-model.md TB-1 §S/T row + TB-3 §S row + §3 cross-cutting",
+  "trust_boundary_ref": ["TB-1", "TB-3"],
+  "consumer_test": "tests/security/jwt-tampering.spec.ts",
+  "notes": "Each pattern represents a JWT or JWT-like artifact presented at a verification point: the runner-token mint endpoint, the LLM gateway authorization layer, Supabase RLS via auth.runner_run_id() / auth.tenant_id(), or the admin Edge Functions. Defense layers: (1) Atlas's mint Edge Function signs with the project-level secret (HS256 over Supabase JWT secret OR ES256 over service-role private key — Cipher Fix-3); (2) auth.runner_run_id() / auth.tenant_id() helpers extract claims server-side; (3) runner_token_mints.revoked_at IS NULL join in every runner-role RLS policy (Cipher Fix-5); (4) hard 5-min TTL with refresh-on-heartbeat (ARCH-D3 + Jury B3 + Cipher Fix-3 unified); (5) iss / aud / iat / exp / jti / sub claims all validated; (6) clock skew tolerance ±30s, no more. Placeholders: sk-EXAMPLE_FAKE_* used where a key would appear; real secrets never in fixtures.",
+  "patterns": [
+    {
+      "id": "JWT-001",
+      "category": "tenant_id_swap",
+      "pattern": "header.payload.signature where payload.tenant_id is swapped from A to B, signature recomputed with attacker's HS256 key",
+      "expected_action": "block",
+      "expected_outcome": "Mint validator rejects: signature verification with the canonical Supabase JWT secret fails. Returns 401 jwt_signature_invalid. RLS would deny anyway (cross-tenant invisibility, returns 0 rows) but the rejection fires earlier at the gateway.",
+      "notes": "The fundamental cross-tenant attack. Why we sign server-side and verify in every privileged path. PRD Goal 5 acceptance test. Cipher Fix-5 (revocation join) is the additional belt."
+    },
+    {
+      "id": "JWT-002",
+      "category": "tenant_id_swap",
+      "pattern": "Valid signature, but payload.tenant_id is a UUID not associated with the requesting user",
+      "expected_action": "block",
+      "expected_outcome": "Mint Edge Function rejects at issuance time: the mint RPC derives tenant_id from auth.uid() lookup against tenant_users, never accepts a customer-supplied tenant_id. Attempted forgery is a 4xx with audit_logs Critical row.",
+      "notes": "Self-issued JWT with forged tenant_id. The defense is that customers NEVER mint JWTs — only the server-side dispatch Edge Function does. Composes with TB-3 §S row in threat-model.md."
+    },
+    {
+      "id": "JWT-003",
+      "category": "tenant_id_swap",
+      "pattern": "JWT with tenant_id mutated to NULL or empty string",
+      "expected_action": "block",
+      "expected_outcome": "Signature verification fails if payload was tampered post-mint; if a NULL was somehow legitimately minted (bug), auth.tenant_id() throws and RLS denies all rows (default-deny posture).",
+      "notes": "NULL-tenant injection. Defense is the helpers' NOT NULL check and RLS policies' tenant_id IS NOT NULL clauses."
+    },
+    {
+      "id": "JWT-004",
+      "category": "tenant_id_swap",
+      "pattern": "JWT with tenant_id mutated to '*' (wildcard attempt)",
+      "expected_action": "block",
+      "expected_outcome": "Signature fails. Defense in depth: RLS uses = (equality) not pattern matching, so '*' as a literal tenant_id matches zero rows even if it leaked through.",
+      "notes": "Wildcard injection. Classic LDAP/SQL-injection pattern ported to JWT claims. Equality-only RLS predicates are the deeper defense."
+    },
+    {
+      "id": "JWT-005",
+      "category": "tenant_id_swap",
+      "pattern": "JWT with tenant_id mutated to a SQL fragment: \"a' OR '1'='1\"",
+      "expected_action": "block",
+      "expected_outcome": "Signature fails. Defense: Postgres treats the claim as a string parameter (parameterized via PL/pgSQL), no string concatenation. SQLi via JWT claim is mechanically impossible in this stack.",
+      "notes": "SQL-injection via JWT claim. Tested for completeness — defense is the stored-proc parameterization. CVE-2023-22524 (Confluence-style claim-injection) cited."
+    },
+    {
+      "id": "JWT-006",
+      "category": "run_id_swap",
+      "pattern": "Valid JWT for run A; attacker swaps payload.run_id to run B's UUID, recomputes signature with attacker-supplied key",
+      "expected_action": "block",
+      "expected_outcome": "Signature verification fails. Even with a valid signature, auth.runner_run_id() would mismatch the row's tenant_id in the runner-role RLS policy (every policy joins runner_token_mints.run_id = target_row.run_id AND tenant_id = target_row.tenant_id).",
+      "notes": "Per ARCH-D3: run_id is a separate claim from tenant_id, both bound at mint time. Atlas's RLS policies enforce the AND join. Cipher Fix-3 unified the claim layout."
+    },
+    {
+      "id": "JWT-007",
+      "category": "run_id_swap",
+      "pattern": "Valid signature on a JWT minted for run A; attacker presents at the LLM gateway claiming work on run B",
+      "expected_action": "block",
+      "expected_outcome": "LLM gateway: jwt.run_id is recorded in runs.llm_calls.run_id and compared against the dispatcher's expected run for the current request. Mismatch → 403 runner_run_mismatch + audit_logs Critical.",
+      "notes": "Cross-run replay within the same tenant. Tighter than cross-tenant. Defense is the gateway's per-call run_id binding."
+    },
+    {
+      "id": "JWT-008",
+      "category": "run_id_swap",
+      "pattern": "Valid JWT, but run_id refers to a run that completed > 24h ago",
+      "expected_action": "block",
+      "expected_outcome": "Mint Edge Function checks runs.state ∈ ('queued', 'running', 'reviewers_running'); a completed/failed run cannot have a fresh runner JWT minted. Existing JWTs expire at 5-min TTL.",
+      "notes": "Stale-run JWT replay. The 5-min TTL caps the worst-case window. The state machine check (audit-run-state-machine.md) is the gating layer."
+    },
+    {
+      "id": "JWT-009",
+      "category": "run_id_swap",
+      "pattern": "Valid JWT for run A bound to runner instance R1; attacker swaps to runner instance R2 via runs.runner_id forgery",
+      "expected_action": "block",
+      "expected_outcome": "runs.runner_id is set at runner pickup (per EC-2 in audit-run-state-machine); it is NOT in the JWT. Forging it in the DB requires bypassing RLS — already covered by Goal 5.",
+      "notes": "Runner-instance hijack. Composes with TB-3 §S (worker accepts cross-tenant job) — the JWT alone doesn't grant cross-runner authority."
+    },
+    {
+      "id": "JWT-010",
+      "category": "run_id_swap",
+      "pattern": "Valid JWT for run A, but the dispatcher's queue row for run A has different tenant_id than JWT.tenant_id",
+      "expected_action": "block",
+      "expected_outcome": "TB-3 §S mitigation: 'Tenant-scoped short-lived JWT minted by the dispatch Edge Function and bound to the run row's tenant_id. Runner validates JWT on every DB call.' Mismatch → 401 + suspended_violation state.",
+      "notes": "Queue-routing bug + JWT cross-check. Both must agree for the runner to proceed."
+    },
+    {
+      "id": "JWT-011",
+      "category": "expired_replay",
+      "pattern": "Valid signature JWT, exp = now - 1 second (just-expired)",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects exp <= now + 30s (clock skew). 401 jwt_expired.",
+      "notes": "Just-expired token. Tight clock-skew tolerance is the key — ±30s, not minutes."
+    },
+    {
+      "id": "JWT-012",
+      "category": "expired_replay",
+      "pattern": "Valid signature JWT, exp = now - 1 hour (long-expired)",
+      "expected_action": "block",
+      "expected_outcome": "Same: 401 jwt_expired. Logged with anomaly flag (long-replay-window suggests credential theft or stale-cache attack).",
+      "notes": "Long-replay window. Should trigger an anomaly alert at the verifier in addition to rejection."
+    },
+    {
+      "id": "JWT-013",
+      "category": "expired_replay",
+      "pattern": "JWT exp = now - 30 seconds; attacker hopes for generous clock skew",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects: 30s is the tolerance for FUTURE clock skew (iat); for exp the tolerance is asymmetric — exp + 0s grace (an expired token is expired; we do NOT extend leniency past exp).",
+      "notes": "Asymmetric clock-skew tolerance: lenient on iat (future), strict on exp (past). The asymmetry is what makes a 5-min TTL actually 5 min worst-case."
+    },
+    {
+      "id": "JWT-014",
+      "category": "alg_confusion",
+      "pattern": "Header { \"alg\": \"none\", \"typ\": \"JWT\" }, signature segment empty",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects: 'none' is not in the algorithm allowlist. The verifier explicitly checks alg === 'HS256' (or ES256 for service-role) BEFORE attempting verification.",
+      "notes": "Canonical alg=none attack (CVE-2015-9235 family). Why the verifier must hardcode the expected alg, never trust the header. Hit auth0/node-jsonwebtoken, jose, pyjwt at various points."
+    },
+    {
+      "id": "JWT-015",
+      "category": "alg_confusion",
+      "pattern": "Header { \"alg\": \"HS256\", ... } — but the project uses RS256/ES256, and the attacker signed with the project's PUBLIC key as the HMAC secret",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects: expected algorithm is hardcoded (HS256 for tenant JWTs minted from Supabase JWT secret); the verifier does NOT use the alg-from-header to pick the verification routine.",
+      "notes": "The classic algorithm-confusion attack. CVE-2016-10555. If a server uses RS256 but the verifier accepts 'whatever alg the header says', a HS256 signature using the RS256 public key as the HMAC secret verifies. Defense: hardcode the algorithm."
+    },
+    {
+      "id": "JWT-016",
+      "category": "alg_confusion",
+      "pattern": "Header { \"alg\": \"HS384\", ... } when expected is HS256",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects: alg mismatch.",
+      "notes": "Algorithm downgrade/upgrade. Some libraries accept any HS* variant. We pin exactly one alg per key class."
+    },
+    {
+      "id": "JWT-017",
+      "category": "alg_confusion",
+      "pattern": "Header { \"alg\": \"RS256\", \"jku\": \"https://attacker.example.com/.well-known/jwks.json\" } — attacker hopes verifier fetches keys from header-supplied URL",
+      "expected_action": "block",
+      "expected_outcome": "Verifier ignores jku/jwk/x5u/x5c headers entirely. Keys come from server-side config only. Returns 401 jwt_unrecognized_header.",
+      "notes": "jku-injection attack (CVE-2018-0114, CVE-2019-7644). The jose library has fixed this; we re-verify by simply not implementing remote-key fetch."
+    },
+    {
+      "id": "JWT-018",
+      "category": "signature_mismatch",
+      "pattern": "Valid header + payload, signature bytes flipped on the last byte",
+      "expected_action": "block",
+      "expected_outcome": "Constant-time HMAC compare returns false. 401 jwt_signature_invalid.",
+      "notes": "Trivial tamper. The compare MUST be constant-time (timingSafeEqual) to prevent the timing-side-channel CVE-2015-2080 family."
+    },
+    {
+      "id": "JWT-019",
+      "category": "signature_mismatch",
+      "pattern": "Header + payload encoded as base64url with `+` and `/` (standard base64) instead of `-` and `_`",
+      "expected_action": "block",
+      "expected_outcome": "Strict base64url decoder rejects non-url-safe chars; the encoded segment hash computed for verification doesn't match the attacker's expectation, so signature fails. (jose strict mode catches this; loose decoders are the bug.)",
+      "notes": "Base64 vs base64url confusion. Documented bypass against several Java JWT libs (CVE-2022-23529)."
+    },
+    {
+      "id": "JWT-020",
+      "category": "signature_mismatch",
+      "pattern": "JWT with two body segments: header.payload1.payload2.signature (extra dot)",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects: JWT must be exactly 3 segments. Returns 401 jwt_malformed.",
+      "notes": "Malformed multi-segment JWT. Some parsers silently used the last segment, leading to claim-injection."
+    },
+    {
+      "id": "JWT-021",
+      "category": "iat_future",
+      "pattern": "Valid signature, iat = now + 1 hour",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects iat > now + 30s (clock skew tolerance). 401 jwt_iat_in_future.",
+      "notes": "Future-dated iat. Naive verifiers ignore iat; strict verifiers reject. Real-world: timestomp / clock-rollback attacks."
+    },
+    {
+      "id": "JWT-022",
+      "category": "iat_future",
+      "pattern": "Valid signature, iat = now + 10 minutes (just outside skew); exp = now + 15 minutes",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects iat > now + 30s.",
+      "notes": "Just-outside-skew iat. Confirms the asymmetric tolerance from JWT-013 is correctly enforced on iat too."
+    },
+    {
+      "id": "JWT-023",
+      "category": "exp_skew",
+      "pattern": "Valid signature, exp = now - 10s; verifier with overly-generous clock skew",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects: exp + 0s strict tolerance.",
+      "notes": "Tests the asymmetric tolerance on the exp side. Many libs default to 60-300s skew on both ends; we set exp tolerance to 0."
+    },
+    {
+      "id": "JWT-024",
+      "category": "exp_skew",
+      "pattern": "JWT with exp missing entirely (omit claim)",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects: exp is REQUIRED; missing → 401 jwt_missing_exp.",
+      "notes": "exp omission. Some libs treat missing exp as 'never expires'. We require it explicitly."
+    },
+    {
+      "id": "JWT-025",
+      "category": "aud_mismatch",
+      "pattern": "Valid signature, aud = \"studio-zero/web\" (web app audience) presented at the runner endpoint (expects aud = \"studio-zero/runner\")",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects: aud must equal 'studio-zero/runner' at the runner endpoint. 401 jwt_aud_mismatch.",
+      "notes": "Audience confusion. Per ARCH-D3 reconciled in milestone-M1.md: 'static aud=studio-zero/runner'. Audience binds the JWT to a specific endpoint class; cross-aud replay is rejected."
+    },
+    {
+      "id": "JWT-026",
+      "category": "aud_mismatch",
+      "pattern": "Valid signature, aud = [\"studio-zero/web\", \"studio-zero/runner\"] (multi-aud)",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects: aud must be a single string matching exactly. We do not accept array aud claims.",
+      "notes": "Multi-aud bypass. RFC 7519 allows aud to be a string or array; we restrict to scalar to prevent confusion attacks."
+    },
+    {
+      "id": "JWT-027",
+      "category": "aud_mismatch",
+      "pattern": "Valid signature, aud = \"studio-zero/runner \" (trailing space)",
+      "expected_action": "block",
+      "expected_outcome": "Strict equality compare; trailing-space mismatch. 401 jwt_aud_mismatch.",
+      "notes": "Whitespace/Unicode aud manipulation. Composes with the default-branch-fuzz-corpus class of normalization bypasses (e.g., 'main ' vs 'main'). Defense: strict equality, NFC-normalize before compare."
+    },
+    {
+      "id": "JWT-028",
+      "category": "jti_collision",
+      "pattern": "Valid signature, jti = same UUID as a previously-issued JWT, presented within the original's exp window",
+      "expected_action": "block",
+      "expected_outcome": "Mint Edge Function uses UUIDv7 (monotonic) for jti AND records every minted jti in runner_token_mints. Verifier checks jti existence; duplicate-issued is the indicator of a tampered or replayed mint response.",
+      "notes": "jti collision. The dispatch mints with UUIDv7 (Atlas migration 0002). Collisions are astronomically unlikely; observed collisions are evidence of tampering."
+    },
+    {
+      "id": "JWT-029",
+      "category": "jti_collision",
+      "pattern": "Two valid JWTs with different signatures but identical jti — attacker has forged the second somehow",
+      "expected_action": "block",
+      "expected_outcome": "First arrival wins; second arrival fails the jti-uniqueness predicate at runner_token_mints. INSERT conflict → 401 jwt_jti_replay.",
+      "notes": "jti-uniqueness as a second signature layer. Even with a valid signature, a duplicate jti is rejected."
+    },
+    {
+      "id": "JWT-030",
+      "category": "revoked_jti",
+      "pattern": "Valid signature JWT, jti has runner_token_mints.revoked_at NOT NULL (operator revoked it after a security event)",
+      "expected_action": "block",
+      "expected_outcome": "RLS policy join (Cipher Fix-5): every runner-role RLS policy includes `JOIN runner_token_mints ON ... WHERE revoked_at IS NULL`. Revoked jti → 0 rows on every query. The runner observes an empty result and goes to failed_terminal.",
+      "notes": "Cipher Fix-5 close. Critical for incident response: when an operator revokes a JWT, the next query within the 5-min TTL window fails the RLS join. Without Fix-5, the revocation would only fire when the JWT naturally expired."
+    },
+    {
+      "id": "JWT-031",
+      "category": "revoked_jti",
+      "pattern": "Valid signature JWT, the refresh-on-heartbeat RPC was called AFTER revocation",
+      "expected_action": "block",
+      "expected_outcome": "refresh-runner-token RPC checks revoked_at IS NULL before issuing a fresh JWT; revoked → 401 refresh_denied_revoked, runner goes to failed_terminal.",
+      "notes": "Revocation propagates to refresh path too. Without this check, a revoked JWT's holder could indefinitely refresh through the 5-min window."
+    },
+    {
+      "id": "JWT-032",
+      "category": "revoked_jti",
+      "pattern": "Valid signature JWT presented at the LLM gateway after global key-rotation event invalidates all JWTs in flight",
+      "expected_action": "block",
+      "expected_outcome": "Verifier rejects: signature verification with the NEW Supabase JWT secret fails for tokens minted under the OLD secret. Cipher key-rotation runbook explicitly accepts this; in-flight runs go to failed_recoverable and re-mint.",
+      "notes": "Key rotation as mass-revocation. Cipher's 90d rotation cadence (threat-model TB-2 §S). The runbook's failure mode is documented and tested."
+    }
+  ]
+}

@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "corpus": "stripe-webhook",
+  "version": "1.0.0",
+  "milestone": "M1",
+  "min_size_m1": 30,
+  "min_size_m2_per_threat_model": 15,
+  "owner": "shield",
+  "co_owner": "ledger",
+  "threat_model_ref": "architecture/threat-model.md §TB-10 + §TB-11",
+  "trust_boundary_ref": ["TB-10", "TB-11"],
+  "consumer_test": "tests/security/stripe-webhook-corpus.spec.ts",
+  "notes": "Each pattern represents an inbound POST to the Stripe webhook endpoint. Defense layers: (1) Stripe-Signature header verified per-endpoint with the signing secret (whsec_*); raw-body capture required (Stripe SDK requires the raw body for signature, not the JSON-parsed object — a common implementation bug). (2) Idempotent on event.id via billing_events (first-write-wins, ON CONFLICT DO NOTHING). (3) Timestamp tolerance: ±5 min from t= in the signature header. (4) Stripe restricted-key scopes minimal; no account-wide access. (5) Stripe Checkout hosted (Halo HC6) — we never touch PAN. (6) client_reference_id and customer-supplied fields validated against tenant_id ownership before crediting. Placeholders: pi_EXAMPLE_FAKE_*, evt_EXAMPLE_FAKE_*, whsec_EXAMPLE_FAKE_SECRET — no real Stripe identifiers. Test fixture's verifier reads whsec from process.env.STRIPE_TEST_WEBHOOK_SECRET, never from this file.",
+  "patterns": [
+    {
+      "id": "SW-001",
+      "category": "signature_mismatch",
+      "pattern": "Body: valid Stripe event JSON. Header: Stripe-Signature: t=<now-epoch>,v1=0000000000000000000000000000000000000000000000000000000000000000",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: HMAC-SHA256(t.body, whsec) does not equal the supplied v1=. 400 stripe_signature_invalid. billing_events row NOT created.",
+      "notes": "All-zero signature — trivial. The constant-time compare must be timingSafeEqual to avoid the CVE-2017-7522 timing side channel."
+    },
+    {
+      "id": "SW-002",
+      "category": "signature_mismatch",
+      "pattern": "Valid signature for body B1, but the POST body is B2 (mutated charge.amount upward)",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: HMAC-SHA256(t.B2, whsec) does not equal HMAC-SHA256(t.B1, whsec). Critically, the verifier must use the RAW body string, not a JSON.parse + JSON.stringify roundtrip (which would change byte ordering).",
+      "notes": "Body-swap. The 'raw body' requirement is the #1 Stripe-integration bug class (Stripe's docs warn explicitly). Composes with audit_logs Critical event on signature failure."
+    },
+    {
+      "id": "SW-003",
+      "category": "signature_mismatch",
+      "pattern": "Valid signature, but constructed with a DIFFERENT endpoint's signing secret (whsec rotation race)",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: per-endpoint whsec lookup; signature for endpoint X does not verify at endpoint Y. 400 stripe_signature_invalid.",
+      "notes": "Per-endpoint secret isolation. If we ever have multiple webhook endpoints (e.g., separate for /checkout, /subscriptions, /disputes), each must have its own whsec; cross-endpoint replay is rejected."
+    },
+    {
+      "id": "SW-004",
+      "category": "signature_mismatch",
+      "pattern": "Header omits the v1= scheme entirely; supplies only t=<now>",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: required v1= signature scheme missing. 400 stripe_signature_malformed.",
+      "notes": "Header malformation. Stripe's spec mandates v1=; missing v1 = bad request, not 'unsigned but accepted'."
+    },
+    {
+      "id": "SW-005",
+      "category": "signature_mismatch",
+      "pattern": "Header supplies v0= (a hypothetical predecessor scheme); v1= absent",
+      "expected_action": "block",
+      "expected_outcome": "Verifier requires v1=; alternate schemes ignored. 400 stripe_signature_malformed.",
+      "notes": "Scheme-downgrade attack — the Bauke 2020 'webhook downgrade' research class. Strict scheme requirement is the defense."
+    },
+    {
+      "id": "SW-006",
+      "category": "signature_mismatch",
+      "pattern": "Stripe-Signature header is set but blank (empty string)",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: 400 stripe_signature_missing. Belt: Edge Function checks header presence and length before invoking constructEvent.",
+      "notes": "Empty-header bypass. Some implementations treat missing-header and empty-header differently; our handler treats both as failure."
+    },
+    {
+      "id": "SW-007",
+      "category": "replay",
+      "pattern": "Identical event payload + valid signature + valid timestamp, delivered twice within 5 minutes",
+      "expected_action": "block",
+      "expected_outcome": "First delivery: signature OK, billing_events.event_id INSERT succeeds, business logic fires. Second delivery: signature OK, billing_events.event_id INSERT conflicts (PK on event_id), ON CONFLICT DO NOTHING. Handler returns 200 to Stripe (acknowledging receipt) but emits no duplicate side effects.",
+      "notes": "Canonical replay. TB-11 §T mitigation in threat-model.md. First-write-wins idempotency is the core defense. Stripe SDK quirk: webhook signature ALONE is replay-able — idempotency is OUR job."
+    },
+    {
+      "id": "SW-008",
+      "category": "replay",
+      "pattern": "Attacker captures a webhook POST, replays 1h later (valid signature, but t= is 60min stale)",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: t= older than tolerance (±5 min) → 400 stripe_signature_expired. Even if it slipped past timestamp, the idempotency check catches it.",
+      "notes": "Long-window replay. Stripe's recommended tolerance is 5 min. SDK constructEvent enforces with the third tolerance argument."
+    },
+    {
+      "id": "SW-009",
+      "category": "replay",
+      "pattern": "Replay at the exact 5-minute + 30s boundary (just outside tolerance)",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: t= outside tolerance.",
+      "notes": "Boundary test — confirms tolerance is strictly enforced, not slightly fuzzy."
+    },
+    {
+      "id": "SW-010",
+      "category": "idempotency_collision",
+      "pattern": "Two webhooks with DIFFERENT signatures (both valid for different bodies) but the same event.id",
+      "expected_action": "block",
+      "expected_outcome": "First arrival: signature OK, billing_events INSERT succeeds. Second arrival: signature OK on different body, but event.id PK conflict → ON CONFLICT DO NOTHING. The handler emits an audit_logs Warning ('webhook_event_id_collision') because Stripe should not deliver two events with the same id.",
+      "notes": "Stripe event.id collision. Should be astronomically rare from Stripe; an observed collision is a strong tampering indicator. Composes with TB-11 §T."
+    },
+    {
+      "id": "SW-011",
+      "category": "idempotency_collision",
+      "pattern": "Idempotency-Key header collision on POST /v1/charges (outbound from us to Stripe; tested in our Stripe API wrapper, not Stripe→us webhook)",
+      "expected_action": "block",
+      "expected_outcome": "Our outbound wrapper builds Idempotency-Key as <run_id>-<purchase_type>-<timestamp_bucket> per TB-10 §T. Stripe returns the original response (idempotent), no double-charge. We assert response is the SAME PaymentIntent id as the first call.",
+      "notes": "PRD §16 M3 gate: stripe-idempotency.spec.ts. The key-format prevents accidental collisions across customers/runs."
+    },
+    {
+      "id": "SW-012",
+      "category": "idempotency_collision",
+      "pattern": "Two parallel POSTs to /v1/charges from race-condition (e.g., two replicas processing the same queue row)",
+      "expected_action": "block",
+      "expected_outcome": "Idempotency-Key is the same in both calls; Stripe returns identical response to both. Our DB has a unique constraint on billing_events.idempotency_key. Second write fails → second replica logs the dup and exits.",
+      "notes": "Race condition between replicas. TB-10 §T 'idempotency-key collision causes a customer to be billed twice' — the worst case. Defense: deterministic key + Stripe's idempotency + our DB unique constraint."
+    },
+    {
+      "id": "SW-013",
+      "category": "forged_event",
+      "pattern": "Attacker POSTs a forged customer.subscription.created event for customer cus_EXAMPLE_FAKE_NOTREAL (no such customer exists in our DB)",
+      "expected_action": "block",
+      "expected_outcome": "Signature verification fails (attacker doesn't have whsec). Defense in depth: even with valid signature, the subscription-created handler validates customer_id exists in our customers table BEFORE crediting; missing → 4xx + Critical audit_logs.",
+      "notes": "Forgery without the secret. The primary signature defense is enough; the customer-existence check is defense-in-depth for the case where whsec leaks."
+    },
+    {
+      "id": "SW-014",
+      "category": "forged_event",
+      "pattern": "Forged checkout.session.completed event crediting an arbitrary client_reference_id with a Code SKU",
+      "expected_action": "block",
+      "expected_outcome": "Signature fails (no whsec). Belt: the handler validates client_reference_id maps to a real tenant_id owned by the customer in checkout_sessions table (initiated by us).",
+      "notes": "Forged completion. The combination of signature + DB cross-check prevents credit hijack. Real-world: Stripe-CTF-style writeups frequently exploit weak client_reference_id validation."
+    },
+    {
+      "id": "SW-015",
+      "category": "forged_event",
+      "pattern": "Forged invoice.payment_succeeded event for an invoice ID that never existed",
+      "expected_action": "block",
+      "expected_outcome": "Signature fails. Belt: invoices.id existence check via Stripe API (rate-limited) on first reception of unknown invoice ID; missing → ignore + audit_logs row.",
+      "notes": "Forged invoice. The Stripe-API cross-check is expensive but only fires on unknown IDs (cache-hit rate >99% expected)."
+    },
+    {
+      "id": "SW-016",
+      "category": "forged_event",
+      "pattern": "Forged charge.refunded with refund.amount > original charge.amount",
+      "expected_action": "block",
+      "expected_outcome": "Signature fails. Belt: refund.amount validated against charge.amount in our DB; over-refund → flagged for manual review + audit_logs Critical (this could only happen via insider abuse, not a legit Stripe event).",
+      "notes": "Refund overcredit. Insider-or-forgery scenario. The amount-cap check is the strongest defense."
+    },
+    {
+      "id": "SW-017",
+      "category": "timestamp_out_of_tolerance",
+      "pattern": "Valid signature, t = now + 10 minutes (future-dated)",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: future t > now + 5min tolerance.",
+      "notes": "Future-dated timestamp. Some implementations only check past-skew. Stripe's SDK checks both directions."
+    },
+    {
+      "id": "SW-018",
+      "category": "timestamp_out_of_tolerance",
+      "pattern": "Valid signature, t = 0 (Unix epoch)",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: t way outside tolerance.",
+      "notes": "Epoch-zero timestamp. Trivial but corpus completeness — confirms 0 is treated as a real number, not 'unset'."
+    },
+    {
+      "id": "SW-019",
+      "category": "timestamp_out_of_tolerance",
+      "pattern": "Valid signature, t = 2099-01-01 (far-future)",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects.",
+      "notes": "Far-future. Same class as SW-017 but extreme."
+    },
+    {
+      "id": "SW-020",
+      "category": "missing_required_fields",
+      "pattern": "Body: { \"id\": \"evt_EXAMPLE_FAKE_001\", \"type\": \"checkout.session.completed\" } — missing data field",
+      "expected_action": "block",
+      "expected_outcome": "Even with valid signature, the handler's schema validation (ajv against stripe-event-shape.schema.json) rejects: required 'data' field missing. 400 schema_validation_failed.",
+      "notes": "Schema validation as a second line. Real Stripe events always have data; missing data = malformed. ajv covers this comprehensively."
+    },
+    {
+      "id": "SW-021",
+      "category": "missing_required_fields",
+      "pattern": "Body: { \"id\": null, ... } — null event id",
+      "expected_action": "block",
+      "expected_outcome": "Schema validation rejects: id is required string. Belt: billing_events.event_id is NOT NULL; INSERT would fail anyway.",
+      "notes": "Null id. The idempotency mechanism breaks if id is null — many systems have credited duplicates due to null-id handling. Schema rejects up front."
+    },
+    {
+      "id": "SW-022",
+      "category": "missing_required_fields",
+      "pattern": "Body: missing top-level 'type' field",
+      "expected_action": "block",
+      "expected_outcome": "Schema validation rejects. The dispatcher routes on type; missing type cannot be dispatched.",
+      "notes": "Missing type. Handler can't dispatch — caught before any side effect."
+    },
+    {
+      "id": "SW-023",
+      "category": "truncated_payload",
+      "pattern": "Valid signature header for full body B; POST delivers only the first 50% of B",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: HMAC over truncated bytes does not match signature for full bytes. 400 stripe_signature_invalid.",
+      "notes": "Network-MITM truncation. The signature covers the full body; truncation breaks it."
+    },
+    {
+      "id": "SW-024",
+      "category": "truncated_payload",
+      "pattern": "POST body is the full event JSON minus the closing `}`",
+      "expected_action": "block",
+      "expected_outcome": "Two layers: (a) JSON.parse fails before signature check; (b) even if accepted, HMAC over truncated bytes fails verification.",
+      "notes": "Malformed JSON. JSON.parse fail returns 400 json_invalid; the parse happens AFTER signature, but parser failure is the second catch."
+    },
+    {
+      "id": "SW-025",
+      "category": "client_ref_traversal",
+      "pattern": "Body: { ..., data: { object: { client_reference_id: \"../../tenants/other-tenant-id/credit\" } } } with valid signature (attacker has whsec)",
+      "expected_action": "block",
+      "expected_outcome": "Handler validates client_reference_id matches the regex ^tnt_[a-z0-9]{20}$ (our format); any other shape → 400 client_ref_malformed + audit_logs Critical.",
+      "notes": "Path-traversal in a payment field. Composes with path-traversal-corpus. The strict regex on client_reference_id is the catch. Real-world: 2023 Bauke writeup on a fintech's webhook credit-hijack via this exact pattern."
+    },
+    {
+      "id": "SW-026",
+      "category": "client_ref_traversal",
+      "pattern": "client_reference_id = \"tnt_..A_VALID_LOOKING_ID/../tnt_other\" (regex-passing prefix + traversal)",
+      "expected_action": "block",
+      "expected_outcome": "Strict regex ^tnt_[a-z0-9]{20}$ rejects (no '/', no '.').",
+      "notes": "Regex bypass attempt. Anchored regex is the defense."
+    },
+    {
+      "id": "SW-027",
+      "category": "event_type_confusion",
+      "pattern": "Body: { id: 'evt_EXAMPLE_FAKE', type: 'charge.succeeded', data: { object: { ...subscription_shape... } } } — charge.succeeded type but subscription-shaped payload, attempting to confuse the dispatcher",
+      "expected_action": "block",
+      "expected_outcome": "Handler dispatches on type FIRST; charge.succeeded handler then ajv-validates the data.object against the charge schema; mismatch → 400 schema_validation_failed.",
+      "notes": "Type/shape mismatch. The per-type schema in ajv is the catch. Real bug class: 2021 OAuth webhook 'type smuggling' research."
+    },
+    {
+      "id": "SW-028",
+      "category": "event_type_confusion",
+      "pattern": "type = 'checkout.session.completed', data.object.payment_status = 'unpaid' (impossible for a real Stripe completion)",
+      "expected_action": "block",
+      "expected_outcome": "Handler validates: completed event must have payment_status === 'paid' OR 'no_payment_required'; 'unpaid' fails the business-logic guard and refuses to credit.",
+      "notes": "Logical-consistency check on top of schema. Even within a valid event-shape, internal logical contradictions are a forgery signal."
+    },
+    {
+      "id": "SW-029",
+      "category": "event_type_confusion",
+      "pattern": "type = 'customer.subscription.created' on a customer that already has an ACTIVE subscription (double-credit attempt)",
+      "expected_action": "block",
+      "expected_outcome": "Idempotency at the BUSINESS level: customer cannot have two active subscriptions of the same plan; INSERT to subscriptions table fails on partial-unique-index. Handler returns 200 to Stripe + audit_logs row.",
+      "notes": "Business-rule idempotency. Different from event.id idempotency — same customer + same plan = same subscription. Partial unique index (where active=true) is the DB enforcement."
+    },
+    {
+      "id": "SW-030",
+      "category": "hmac_truncation",
+      "pattern": "Signature header truncates v1= to 32 hex chars (half of SHA-256)",
+      "expected_action": "block",
+      "expected_outcome": "constructEvent rejects: signature length mismatch (expects 64 hex chars for SHA-256). Stripe SDK constructEvent strict-mode enforces this.",
+      "notes": "HMAC truncation attack. Documented bypass against libraries that did `signature.startsWith(expected)` instead of constant-time-equal. CVE-2014-1266 (goto fail) family — comparison bugs."
+    },
+    {
+      "id": "SW-031",
+      "category": "hmac_truncation",
+      "pattern": "Signature header supplies v1=<correct_first_byte_repeated_64_times> — attempting timing-based byte-by-byte recovery",
+      "expected_action": "block",
+      "expected_outcome": "timingSafeEqual prevents byte-by-byte recovery; rejected as signature_invalid. Rate-limit on signature-failure (10/min/IP) caps the attack window.",
+      "notes": "Timing oracle on HMAC compare. constant-time compare + rate-limit is the layered defense. CVE-2017-7522 (Stripe-go library's pre-1.0 vulnerability) cited inspiration."
+    }
+  ]
+}
