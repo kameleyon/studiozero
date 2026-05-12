@@ -85,6 +85,7 @@
         "app/api/webhooks/**/route.{ts,tsx}",
         "app/api/admin/**/route.{ts,tsx}",
         "app/api/runs/route.{ts,tsx}",
+        "app/api/billing/**/route.{ts,tsx}",
         "app/auth/callback/route.{ts,tsx}",
         "instrumentation.ts",
         "lib/supabase-service.ts"

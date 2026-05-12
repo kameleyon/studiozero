@@ -140,6 +140,74 @@ function stripPii(props: Record<string, unknown>): Record<string, unknown> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Cipher Fix-3b (M2) — HMAC-SHA256 tenant_id hashing                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Replace any `tenant_id` field on the incoming traits/props bag with
+ * `tenant_hash` (HMAC-SHA256 of the tenant_id keyed on POSTHOG_HASH_SALT,
+ * hex-encoded). PostHog NEVER sees the raw tenant UUID — only the
+ * deterministic hash that joins events for the same tenant.
+ *
+ * If the salt env var is absent (forgot to provision), we DROP the
+ * tenant_id entirely and proceed — fail-closed posture: a missing salt is
+ * a misconfiguration, but the safety guarantee that PostHog never sees
+ * raw tenant_id MUST hold regardless.
+ *
+ * Salt rotation invalidates cross-cohort joins — this is by design.
+ * Per finance/stripe-config.md §1.2 (key rotation cadence) the
+ * POSTHOG_HASH_SALT rotates on the Cipher 90-day cadence.
+ */
+async function hashTenantTrait(
+  traits: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const raw = traits.tenant_id;
+  if (typeof raw !== "string" || raw.length === 0) return traits;
+
+  // Pull the salt — supports both server-inlined NEXT_PUBLIC_ form (when
+  // analytics is initialised in a Server Component that flows to client)
+  // and a Vault-only POSTHOG_HASH_SALT for server-side identify paths.
+  const salt =
+    (typeof process !== "undefined" &&
+      typeof process.env?.POSTHOG_HASH_SALT === "string"
+      ? process.env.POSTHOG_HASH_SALT
+      : null) ??
+    (typeof process !== "undefined" &&
+      typeof process.env?.NEXT_PUBLIC_POSTHOG_HASH_SALT === "string"
+      ? process.env.NEXT_PUBLIC_POSTHOG_HASH_SALT
+      : null);
+
+  // Drop the raw tenant_id no matter what. Add the hash only if we have salt.
+  const out = { ...traits };
+  delete out.tenant_id;
+
+  if (!salt) {
+    return out;
+  }
+
+  try {
+    const subtle = typeof crypto !== "undefined" && crypto.subtle;
+    if (!subtle) return out;
+    const enc = new TextEncoder();
+    const key = await subtle.importKey(
+      "raw",
+      enc.encode(salt),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sig = await subtle.sign("HMAC", key, enc.encode(raw));
+    const hex = Array.from(new Uint8Array(sig))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    out.tenant_hash = hex;
+  } catch {
+    // Crypto unavailable — leave the raw stripped, no hash.
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
 /* PreconsentEvent shape                                              */
 /* ------------------------------------------------------------------ */
 
@@ -246,6 +314,12 @@ class AnalyticsGate {
    * Identify the user. ONLY called from the server-side post-signup flow
    * (or its client mirror immediately after `signup_completed`). Never
    * called with PII; `userId` is the Supabase Auth UUID.
+   *
+   * Cipher Fix-3b (M2): if traits carries `tenant_id`, replace it with
+   * `tenant_hash` (HMAC-SHA256 keyed on POSTHOG_HASH_SALT). PostHog NEVER
+   * sees the raw tenant UUID — it sees a deterministic hash that joins
+   * across events for the same tenant but cannot be reversed without the
+   * vault-stored salt. Salt rotation invalidates the join intentionally.
    */
   identify(userId: string, traits: Record<string, unknown> = {}): void {
     if (typeof window === "undefined") return;
@@ -253,8 +327,12 @@ class AnalyticsGate {
     if (!userId) return;
 
     const safeTraits = stripPii(traits);
-    void this.ensurePostHogReady().then((ph) => {
-      ph?.identify(userId, safeTraits);
+    // Cipher Fix-3b: HMAC the tenant_id before it ever crosses into the
+    // PostHog payload.
+    void hashTenantTrait(safeTraits).then((withHashed) => {
+      void this.ensurePostHogReady().then((ph) => {
+        ph?.identify(userId, withHashed);
+      });
     });
 
     // Stamp signup_completed timestamp for TTFV math.
@@ -590,5 +668,6 @@ export const __INTERNALS__ = {
   stripPii,
   isHighEntropySecret,
   shannonEntropy,
+  hashTenantTrait,
   BUFFER_CAP,
 };

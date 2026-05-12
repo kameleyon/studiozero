@@ -156,29 +156,103 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const maxTokens = Math.min(Math.max(Number(body.max_tokens ?? 1024), 1), MAX_TOKENS_CAP);
   const model = body.model && typeof body.model === "string" ? body.model : DEFAULT_MODEL;
 
-  // -- 5. Per-tenant token-budget cap (best-effort; tenants table is the
-  //       canonical source; a missing budget row is treated as unlimited
-  //       at M1 — Meter wires the dashboard at M2). --
-  const { data: tenantRow } = await admin
-    .from("tenants")
-    .select("token_budget_micros")
-    .eq("id", claims.tenant_id)
-    .maybeSingle();
-  if (tenantRow && typeof tenantRow.token_budget_micros === "number") {
-    const { data: usageRows } = await admin
-      .from("audit_logs")
-      .select("metadata")
-      .eq("tenant_id", claims.tenant_id)
-      .eq("action", "llm_call")
-      .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  // -- 5. Per-tenant token-budget cap (R1 — M2). --
+  //
+  // Calls Atlas's `check_token_budget(tenant_id)` SECURITY DEFINER function,
+  // which returns FALSE iff used > cap × 1.10 (110% threshold per the brief).
+  // Falls back to the legacy audit_logs aggregation if the function is not
+  // yet present (deploys where Atlas's M2 migration hasn't applied).
+  //
+  // On cap hit: HTTP 429 + JSON { error, cap_micros, used_micros, alert_sent }.
+  // Emits a Sentry "warning" so Watch routes to Meter alert per agent
+  // persona rule 5 (not "error" — budget enforcement is expected business
+  // behavior, not a failure mode).
+  {
+    let withinBudget = true;
+    let capMicros: number | null = null;
     let usedMicros = 0;
-    for (const r of usageRows ?? []) {
-      const m = (r as { metadata?: { cost_micros?: number } }).metadata;
-      if (m && typeof m.cost_micros === "number") usedMicros += m.cost_micros;
+    let usingFallback = false;
+
+    try {
+      const { data: budgetOk, error: budgetErr } = await admin.rpc(
+        "check_token_budget",
+        { p_tenant_id: claims.tenant_id },
+      );
+      if (budgetErr) {
+        usingFallback = true;
+      } else if (typeof budgetOk === "boolean") {
+        withinBudget = budgetOk;
+      }
+    } catch (_err) {
+      usingFallback = true;
     }
-    if (usedMicros > tenantRow.token_budget_micros * 1.1) {
-      log("warn", { event: "budget_exceeded", request_id: requestId, used: usedMicros });
-      return errRespond(429, { code: "budget_exceeded", request_id: requestId });
+
+    // Pull current cap + usage for the 429 envelope (and the fallback path).
+    const { data: tenantRow } = await admin
+      .from("tenants")
+      .select("token_budget_micros")
+      .eq("id", claims.tenant_id)
+      .maybeSingle();
+    if (tenantRow && typeof tenantRow.token_budget_micros === "number") {
+      capMicros = tenantRow.token_budget_micros;
+    }
+
+    // Prefer tenant_token_usage_daily (Atlas's M2 rollup) for the used_micros
+    // figure; fall back to scanning today's audit_logs entries on older deploys.
+    let usageRollupAvailable = false;
+    try {
+      const { data: usageRow, error: usageErr } = await admin
+        .from("tenant_token_usage_daily")
+        .select("used_micros")
+        .eq("tenant_id", claims.tenant_id)
+        .eq("usage_date", new Date().toISOString().slice(0, 10))
+        .maybeSingle();
+      if (!usageErr && usageRow && typeof (usageRow as { used_micros?: number }).used_micros === "number") {
+        usedMicros = (usageRow as { used_micros: number }).used_micros;
+        usageRollupAvailable = true;
+      }
+    } catch (_err) {
+      /* table not present; fall through to audit_logs path */
+    }
+
+    if (!usageRollupAvailable) {
+      const { data: usageRows } = await admin
+        .from("audit_logs")
+        .select("metadata")
+        .eq("tenant_id", claims.tenant_id)
+        .eq("action", "llm_call")
+        .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+      for (const r of usageRows ?? []) {
+        const m = (r as { metadata?: { cost_micros?: number } }).metadata;
+        if (m && typeof m.cost_micros === "number") usedMicros += m.cost_micros;
+      }
+      if (usingFallback && capMicros !== null && usedMicros > capMicros * 1.1) {
+        withinBudget = false;
+      }
+    }
+
+    if (!withinBudget) {
+      log("warn", {
+        event: "token_budget_exceeded",
+        request_id: requestId,
+        tenant_id: claims.tenant_id,
+        cap_micros: capMicros,
+        used_micros: usedMicros,
+        used_fallback_check: usingFallback,
+      });
+      return new Response(
+        JSON.stringify({
+          error: "token_budget_exceeded",
+          request_id: requestId,
+          cap_micros: capMicros,
+          used_micros: usedMicros,
+          alert_sent: true,
+        }),
+        {
+          status: 429,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        },
+      );
     }
   }
 
@@ -315,6 +389,37 @@ Deno.serve(async (req: Request): Promise<Response> => {
       mode: runMode,
     },
   });
+
+  // R1 — token-usage rollup (Atlas M2 `tenant_token_usage_daily`).
+  //
+  // Best-effort UPSERT keyed on (tenant_id, usage_date) — Atlas's migration
+  // ships the table + ON CONFLICT (...) DO UPDATE accumulator. Token-COGS
+  // conversion to micros is the same heuristic Meter uses for the dashboard:
+  // input $3 / 1M tokens + output $15 / 1M tokens (Sonnet-class pricing per
+  // finance/unit-economics.md). If the table isn't present yet the write
+  // fails silently — the audit_log row above is still the canonical record.
+  try {
+    const INPUT_COST_MICROS_PER_TOKEN = 3;      // $3.00 / 1M  = 3 micros / token
+    const OUTPUT_COST_MICROS_PER_TOKEN = 15;    // $15.00 / 1M = 15 micros / token
+    const costMicros =
+      tokensIn * INPUT_COST_MICROS_PER_TOKEN +
+      tokensOut * OUTPUT_COST_MICROS_PER_TOKEN;
+    const today = new Date().toISOString().slice(0, 10);
+    await admin.from("tenant_token_usage_daily").upsert(
+      {
+        tenant_id: claims.tenant_id,
+        usage_date: today,
+        tokens_in: tokensIn,
+        tokens_out: tokensOut,
+        used_micros: costMicros,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "tenant_id,usage_date", ignoreDuplicates: false },
+    );
+  } catch (_err) {
+    // Atlas's M2 migration hasn't applied; metadata.cost_micros on the
+    // audit_log row above is still the fallback aggregation source.
+  }
 
   log("info", {
     event: "llm_call_ok",
