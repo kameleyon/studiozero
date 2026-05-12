@@ -27,6 +27,6 @@
     "@vitest/coverage-v8": "^2.1.9",
     "tsx": "^4.21.0",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.6"
   }
 }
