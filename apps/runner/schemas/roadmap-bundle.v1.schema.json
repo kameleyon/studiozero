@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://studio-zero.app/schemas/roadmap-bundle.v1.json",
+  "title": "Studio Zero — Build-mode roadmap-bundle.v1",
+  "description": "Aggregated output of Build mode — per V2 milestone exit gate. Validated by `tests/integration/build-mode-happy-path.spec.ts`.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "build_id",
+    "tenant_id",
+    "brief_ref",
+    "documents",
+    "layer_outputs",
+    "audit_gate",
+    "generated_at",
+    "produced_by"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "roadmap-bundle.v1" },
+    "build_id": { "type": "string", "format": "uuid" },
+    "tenant_id": { "type": "string", "format": "uuid" },
+    "brief_ref": { "type": "string", "format": "uuid" },
+    "documents": {
+      "type": "object",
+      "required": [
+        "readme_md",
+        "roadmap_md",
+        "architecture_md",
+        "prd_md",
+        "brand_tokens_json",
+        "voice_md",
+        "decisions_md",
+        "risks_md",
+        "cogs_md",
+        "channels_md"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "readme_md": { "type": "string", "minLength": 1 },
+        "roadmap_md": { "type": "string", "minLength": 1 },
+        "architecture_md": { "type": "string", "minLength": 1 },
+        "prd_md": { "type": "string", "minLength": 1 },
+        "brand_tokens_json": { "type": "string", "minLength": 1 },
+        "voice_md": { "type": "string", "minLength": 1 },
+        "decisions_md": { "type": "string", "minLength": 1 },
+        "risks_md": { "type": "string", "minLength": 1 },
+        "cogs_md": { "type": "string", "minLength": 1 },
+        "channels_md": { "type": "string", "minLength": 1 }
+      }
+    },
+    "layer_outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["layer", "agent", "status", "summary"],
+        "additionalProperties": false,
+        "properties": {
+          "layer": {
+            "type": "string",
+            "enum": [
+              "strategy",
+              "design",
+              "data",
+              "security",
+              "growth",
+              "frontend",
+              "backend",
+              "ops"
+            ]
+          },
+          "agent": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["complete", "complete-with-fixes", "skipped", "failed"]
+          },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 4000 },
+          "score": { "type": ["number", "null"], "minimum": 0, "maximum": 100 },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "kind"],
+              "properties": {
+                "name": { "type": "string" },
+                "kind": {
+                  "type": "string",
+                  "enum": ["md", "json", "yaml", "diagram"]
+                },
+                "content": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "audit_gate": {
+      "type": "object",
+      "required": ["verdict", "score", "decided_at"],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["PASS", "PASS WITH FIXES", "FAIL"]
+        },
+        "score": { "type": "number", "minimum": 0, "maximum": 100 },
+        "decided_at": { "type": "string", "format": "date-time" },
+        "audit_run_id": { "type": "string" },
+        "rejection_reason": { "type": "string" }
+      }
+    },
+    "repo_seed": {
+      "type": ["object", "null"],
+      "properties": {
+        "html_url": { "type": "string", "format": "uri" },
+        "milestones_created": { "type": "integer", "minimum": 0 },
+        "issues_created": { "type": "integer", "minimum": 0 },
+        "default_branch": { "type": "string" }
+      }
+    },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "produced_by": {
+      "type": "object",
+      "required": ["runner_version"],
+      "properties": {
+        "runner_version": { "type": "string" },
+        "request_id": { "type": "string" }
+      }
+    }
+  }
+}
