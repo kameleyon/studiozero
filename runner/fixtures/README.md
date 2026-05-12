@@ -6,17 +6,24 @@ Each subdirectory is one corpus; each corpus has an `index.json` of adversarial 
 
 ## Corpora at M1 + M2
 
-| Corpus           | Path                                 | M1 size | Current | Min M2 | Threat-model ref       | Verify test                                      |
-| ---------------- | ------------------------------------ | ------: | ------: | -----: | ---------------------- | ------------------------------------------------ |
-| Prompt injection | `prompt-injection-corpus/index.json` |      30 |     219 |    200 | §3.2 PI-1..PI-7        | `tests/security/prompt-injection-corpus.spec.ts` |
-| SSRF             | `ssrf-corpus/index.json`             |      32 |     32+ |    100 | §3.1 SSRF-1..SSRF-8    | `tests/security/ssrf-egress.spec.ts`             |
-| Path traversal   | `path-traversal-corpus/index.json`   |      32 |     32+ |    32+ | §3.4 PT-1..PT-7        | `tests/security/path-traversal-fuzz.spec.ts`     |
-| JWT tampering    | `jwt-tampering-corpus/index.json`    |      32 |     32+ |    32+ | TB-1/TB-3 STRIDE-T     | `tests/security/jwt-tampering.spec.ts`           |
-| Stripe webhook   | `stripe-webhook-corpus/index.json`   |      31 |     31+ |    31+ | TB-10/TB-11            | `tests/security/stripe-webhook-corpus.spec.ts`   |
-| Sandbox escape   | `sandbox-escape-corpus/index.json`   |       — |      33 |     30 | §3.5 SE-1..SE-8        | `tests/security/sandbox-escape-top30.spec.ts`    |
-| Secret exfil     | `secret-exfil-corpus/index.json`     |       — |      45 |     40 | §3.3 EXF-1..EXF-4      | `tests/security/secret-exfil-corpus.spec.ts`     |
-| RLS cross-tenant | `rls-cross-tenant-corpus/index.json` |       — |      23 |     20 | TB-2 STRIDE-T/E + §3.5 | `tests/security/rls-cross-tenant.spec.ts`        |
-| GitHub webhook   | `github-webhook-corpus/index.json`   |       — |      12 |     10 | TB-13 + §4 line 426    | `tests/security/github-webhook-corpus.spec.ts`   |
+The "Consumer status" column tracks whether a Verify spec in HEAD iterates the
+corpus and exercises the canonical defense. The path under "Verify test"
+is the spec file that consumes the corpus. M2 cleanup (this commit) lands
+the prompt-injection + sandbox-escape consumers — those were the two
+Critical items from the M2 Jury audit (Shield expanded the corpora at
+commit 08c1f15 but consumer specs were absent in HEAD).
+
+| Corpus           | Path                                 | M1 size | Current | Min M2 | Threat-model ref       | Verify consumer spec (HEAD)                                                           | Consumer status |
+| ---------------- | ------------------------------------ | ------: | ------: | -----: | ---------------------- | ------------------------------------------------------------------------------------- | --------------- |
+| Prompt injection | `prompt-injection-corpus/index.json` |      30 |     219 |    200 | §3.2 PI-1..PI-7        | `tests/security/prompt-injection-corpus.spec.ts`                                      | LIVE — M2 close |
+| SSRF             | `ssrf-corpus/index.json`             |      32 |     32+ |    100 | §3.1 SSRF-1..SSRF-8    | `tests/integration/ssrf-egress.spec.ts` (M1) + `apps/runner/tests/ssrf-guard.test.ts` | LIVE — M1       |
+| Path traversal   | `path-traversal-corpus/index.json`   |      32 |     32+ |    32+ | §3.4 PT-1..PT-7        | `tests/integration/path-traversal-fuzz.spec.ts`                                       | LIVE — M1       |
+| JWT tampering    | `jwt-tampering-corpus/index.json`    |      32 |     32+ |    32+ | TB-1/TB-3 STRIDE-T     | `tests/security/jwt-tampering.spec.ts` (planned M3 close)                             | DEFERRED — M3   |
+| Stripe webhook   | `stripe-webhook-corpus/index.json`   |      31 |     31+ |    31+ | TB-10/TB-11            | `tests/integration/stripe-webhook-handler.spec.ts`                                    | LIVE — M2       |
+| Sandbox escape   | `sandbox-escape-corpus/index.json`   |       — |      33 |     30 | §3.5 SE-1..SE-8        | `tests/security/sandbox-escape-top30.spec.ts`                                         | LIVE — M2 close |
+| Secret exfil     | `secret-exfil-corpus/index.json`     |       — |      45 |     40 | §3.3 EXF-1..EXF-4      | `tests/integration/secret-exfil.spec.ts`                                              | LIVE — M2       |
+| RLS cross-tenant | `rls-cross-tenant-corpus/index.json` |       — |      23 |     20 | TB-2 STRIDE-T/E + §3.5 | `tests/integration/rls-cross-tenant-corpus.spec.ts`                                   | LIVE — M2       |
+| GitHub webhook   | `github-webhook-corpus/index.json`   |       — |      12 |     10 | TB-13 + §4 line 426    | `tests/integration/github-webhook-fuzz.spec.ts`                                       | LIVE — M2       |
 
 **M2 Batch 1 (Shield):** the bottom four corpora land at M2 to satisfy the exit-gate requirements in `sprint/milestone-M2.md` lines 63–64 + 119–120: PI ≥200, sandbox-escape top-30. Secret-exfil and RLS cross-tenant are produced now to compose with Verify's M2 test additions; github-webhook lifts the §4 line-426 corpus-inventory line item out of M1's "stub-or-defer" state.
 
