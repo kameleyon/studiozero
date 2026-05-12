@@ -1,11 +1,11 @@
 # Studio Zero — Terms of Service
 
-**Version:** 1.0 (M1 first draft)
+**Version:** 1.1 (M2 — cross-refs to refund-matrix.md M2 implementation; D22 reset clause locked; DPA template URL bound)
 **Effective date:** 2026-05-12
 **Last updated:** 2026-05-12
 **Owner:** Comply (Compliance Officer)
-**PRD anchors:** §17 Decision #19 (BYOK pass-through — LOCKED), §14.5 (compliance), §14.7 (AUP), §11.3 (AI disclosure), §12 (pricing & tiers), §14.4 (privacy & retention)
-**Cross-references:** `legal/privacy-policy.md`, `legal/aup.md`, `legal/subprocessors.md`, `legal/ai-system-card-v0.1.md`, `finance/refund-matrix.md`
+**PRD anchors:** §17 Decision #19 (BYOK pass-through — LOCKED), §17 Decision #20 (regional refund matrix — LOCKED v0.4), §17 Decision #22 (EU cooling-off resets per upgrade — LOCKED v0.5), §14.5 (compliance), §14.7 (AUP), §11.3 (AI disclosure), §12 (pricing & tiers), §14.4 (privacy & retention)
+**Cross-references:** `legal/privacy-policy.md`, `legal/aup.md`, `legal/subprocessors.md`, `legal/data-processing-agreement.md` (Art. 28 DPA — LIVE at M2), `legal/ai-system-card-v0.5.md`, `finance/refund-matrix.md`, `compliance/click-to-cancel-ux-audit.md`, `compliance/d22-cooling-off-flow.md`
 **Voice:** plain English, grade-9 ceiling, sentence case per `brand/voice.md`. We say what we mean. Legal terms are explained in line, not buried in a glossary.
 
 > **Plain-English mandate.** This file follows the principle in `agents/operations/comply.md` §4: a Terms of Service that no consumer can read is not a Terms of Service, it is a liability shield made of fog. Every defined term is introduced in plain words; the legal-of-record language follows in parentheses where required for enforceability.
@@ -120,7 +120,7 @@ In BYOK mode, our role is mechanical: we receive your audit request, we package 
 
 ### 6.4 GDPR joint-controllership disclaimer
 
-For tokens you consume on your Anthropic key, **Studio Zero disclaims joint-controllership with Anthropic under GDPR Article 26**. You are the controller of the data you submit to Anthropic via your key; Anthropic is the controller of the data it processes under its own contract with you. Studio Zero's role for that data flow is limited to the technical conduit described in §6.3, which is a processor-style role under GDPR Article 28. We will execute an Article 28 Data Processing Agreement with you on request (the template lives at `compliance/dpa-template.md`; ships at M2).
+For tokens you consume on your Anthropic key, **Studio Zero disclaims joint-controllership with Anthropic under GDPR Article 26**. You are the controller of the data you submit to Anthropic via your key; Anthropic is the controller of the data it processes under its own contract with you. Studio Zero's role for that data flow is limited to the technical conduit described in §6.3, which is a processor-style role under GDPR Article 28. We will execute an Article 28 Data Processing Agreement with you on request — the template is LIVE at M2 at `legal/data-processing-agreement.md` per Decision #17.
 
 ### 6.5 Anthropic's terms apply to your BYOK use
 
@@ -144,11 +144,13 @@ Paid subscriptions renew automatically at the end of each billing period (monthl
 
 ### 7.3 Click-to-Cancel (FTC 16 CFR Part 425)
 
-You can cancel your subscription at any time, online, in the same medium you used to sign up. Cancellation is at Settings → Billing → Cancel Subscription, or in the Stripe Customer Portal. We do not require you to call us, email us, or talk to a human. Confirmation arrives by email within 60 seconds. Full mechanics are speced in `finance/refund-matrix.md` §4.
+You can cancel your subscription at any time, online, in the same medium you used to sign up. Cancellation is at Settings → Billing → Manage billing → Cancel subscription (Stripe Customer Portal). We do not require you to call us, email us, or talk to a human. The cancel path is at most three clicks from the in-app sidebar. Confirmation arrives by email within 60 seconds. Full mechanics are speced in `finance/refund-matrix.md` §4; the M2 UX-compliance audit lives at `compliance/click-to-cancel-ux-audit.md`.
 
-### 7.4 Cooling-off (EU/UK consumers)
+### 7.4 Cooling-off (EU/UK consumers) — Decision #22 LOCKED
 
-If you live in the EU or UK and you are a consumer (not buying for business), you have a 14-day cooling-off period from the date your contract starts, under EU Directive 2011/83/EU Article 9 / UK Consumer Contracts Regulations 2013 Regulation 30. You can cancel within 14 days for a full refund **unless** you expressly waived the right at checkout (CRD Article 16(m) / CCR Reg. 36 waiver — speced in `finance/refund-matrix.md` §3). If you upgrade your subscription during this period, the 14-day window resets on the upgrade (Decision #22 — locked).
+If you live in the EU or UK and you are a consumer (not buying for business), you have a 14-day cooling-off period from the date your contract starts, under EU Directive 2011/83/EU Article 9 / UK Consumer Contracts Regulations 2013 Regulation 30. You can cancel within 14 days for a full refund **unless** you expressly waived the right at checkout (CRD Article 16(m) / CCR Reg. 36 waiver — speced in `finance/refund-matrix.md` §3.2; we use the legally-sufficient waiver text drafted at `finance/refund-matrix.md` §8.2/§8.3 verbatim).
+
+**D22 reset clause (LOCKED):** If you upgrade your subscription during this period — or at any later time, while you remain an EU/UK consumer — a new 14-day cooling-off window opens on the upgrade contract from the upgrade timestamp. Downgrades do not reset the window. Full mechanics + edge cases are speced in `finance/refund-matrix.md` §3.5 + §3.6; the M2 UX-compliance audit lives at `compliance/d22-cooling-off-flow.md`.
 
 ### 7.5 California pro-rata refunds (SB 313)
 
@@ -210,7 +212,7 @@ Studio Zero is an AI-powered service. By using it, you acknowledge and agree:
 
 ### 10.1 Outputs are AI-generated
 
-Every finding, score, recommendation, summary, transcript, and explanatory artifact produced by Studio Zero is generated by large language models (Anthropic Claude). We carry the EU AI Act Article 50 disclosure machinery on every response (HTTP header `X-AI-Generated: studio-zero` and HTML `<meta name="ai-generated">` tag — verified live at M1; see `legal/ai-system-card-v0.1.md` for the full System Card).
+Every finding, score, recommendation, summary, transcript, and explanatory artifact produced by Studio Zero is generated by large language models (Anthropic Claude). We carry the EU AI Act Article 50 disclosure machinery on every response (HTTP header `X-AI-Generated: studio-zero` and HTML `<meta name="ai-generated">` tag — verified live at M1; see `legal/ai-system-card-v0.5.md` for the full System Card).
 
 ### 10.2 Outputs may be wrong
 
@@ -406,4 +408,4 @@ Neither party is liable for delay or failure to perform caused by events beyond 
 
 ---
 
-_Comply locks this Terms of Service at v1.0 on 2026-05-12. Re-verify quarterly. Any regulatory change (EU AI Act Art. 50 binding 2026-08-02; FTC NPRM pending; CPRA regulation updates; Stripe Services Agreement amendments) triggers a version bump._
+_Comply locks this Terms of Service at v1.1 on 2026-05-12 (M2 — Click-to-Cancel UX cross-ref + D22 reset clause locked + DPA template URL bound). Re-verify quarterly. Any regulatory change (EU AI Act Art. 50 binding 2026-08-02; FTC NPRM pending; CPRA regulation updates; Stripe Services Agreement amendments) triggers a version bump._

@@ -5,19 +5,19 @@ import { LegalPage } from "../../components/LegalPage";
 import type { Metadata } from "next";
 
 /**
- * /subprocessors — Subprocessor list (M1 first publication).
+ * /subprocessors — Subprocessor list (M2 refinement).
  *
- * Phase 9 M1 Batch 3 (Comply). Pulled forward from the M3 stub. Source-
- * of-truth Markdown lives at `legal/subprocessors.md`. 13 entries
- * (10 core + 3 conditional). Mirrors every external service in
- * `architecture/system-diagram.md`. 30-day change-notification window
- * per Decision #17.
+ * Phase 9 M2 Batch 2 (Comply). Source-of-truth Markdown at
+ * `legal/subprocessors.md` v1.1 — 13 in-use (10 core + 3 conditional)
+ * + 3 reserved for V1.5/V2 = 16 total on the canonical inventory.
+ * Mirrors every external service in `architecture/system-diagram.md`.
+ * 30-day change-notification window per Decision #17.
  */
 
 export const metadata: Metadata = {
   title: "Subprocessors",
   description:
-    "The 13 third-party vendors that touch your data when you use Studio Zero, with purpose, region, data category, and DPA links.",
+    "The third-party vendors that touch your data when you use Studio Zero, with purpose, region, data category, and DPA links — 13 in use plus 3 reserved.",
 };
 
 export const dynamic = "force-static";
@@ -29,7 +29,7 @@ export default function SubprocessorsPage(): React.ReactElement {
       title="Subprocessors"
       source="legal/subprocessors.md"
       effectiveDate="2026-05-12"
-      version="1.0"
+      version="1.1"
     />
   );
 }
