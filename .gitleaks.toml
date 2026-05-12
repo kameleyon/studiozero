@@ -45,6 +45,14 @@ paths = [
   # secret-shaped strings as test inputs.
   '''^runner/fixtures/secret-scanner-fixtures/''',
   '''^runner/fixtures/jwt-tampering-corpus/''',
+  '''^runner/fixtures/prompt-injection-corpus/''',
+  '''^runner/fixtures/secret-exfil-corpus/''',
+  '''^runner/fixtures/sandbox-escape-corpus/''',
+  '''^runner/fixtures/rls-cross-tenant-corpus/''',
+  '''^runner/fixtures/github-webhook-corpus/''',
+  '''^runner/fixtures/ssrf-corpus/''',
+  '''^runner/fixtures/path-traversal-corpus/''',
+  '''^runner/fixtures/stripe-webhook-corpus/''',
 ]
 
 regexes = [

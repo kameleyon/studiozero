@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "corpus": "sandbox-escape",
+  "version": "1.0.0",
+  "milestone": "M2",
+  "min_size_m2": 30,
+  "min_size_m5": 200,
+  "owner": "shield",
+  "co_owner": "verify",
+  "threat_model_ref": "architecture/threat-model.md §3.5",
+  "trust_boundary_ref": ["TB-3"],
+  "consumer_test": "tests/security/sandbox-escape-top30.spec.ts",
+  "notes": "Each pattern is a syscall, capability use, exploit-bait input, or file/proc access expected to be blocked by the rootless-container + seccomp + dropped-caps + cgroup defense per threat-model §3.5. Expected runtime defense: (a) the syscall ENOSYS or EPERM from the seccomp profile; (b) capability EPERM from dropped-caps; (c) cgroup OOM/PIDS limit kicks; (d) falco emits a Critical event and the container is killed by the runner supervisor within 2s. Verify's spec mocks the runner with synthetic stimuli (e.g., a binary calling unshare(CLONE_NEWUSER)) and asserts (i) the syscall fails with the expected errno, (ii) a falco event is emitted to audit_logs, (iii) the run terminates in 'killed' state, (iv) no host-side artifacts (process, file outside the per-run tmpfs) survive. M2 exit-gate: top-30 patterns 100% blocked (per sprint/milestone-M2.md line 64). M5 exit-gate: full ≥200 corpus + external pentest sign-off.",
+  "patterns": [
+    {
+      "id": "SE-001",
+      "category": "cap_misuse",
+      "pattern": "syscall: mount(\"none\", \"/mnt\", \"tmpfs\", 0, NULL) — requires CAP_SYS_ADMIN",
+      "expected_action": "block",
+      "expected_outcome": "Dropped cap CAP_SYS_ADMIN → mount() returns EPERM (errno 1). Seccomp also denies mount() explicitly. Falco rule 'Mount Launched in Privileged Container' fires Critical.",
+      "notes": "Threat-model SE-4 (capability-as-escape-primitive). CAP_SYS_ADMIN is the most-abused capability in container escapes (CIS Docker Benchmark §5.22). Mount is the canonical exercise."
+    },
+    {
+      "id": "SE-002",
+      "category": "cap_misuse",
+      "pattern": "syscall: socket(AF_PACKET, SOCK_RAW, 0) — requires CAP_NET_RAW",
+      "expected_action": "block",
+      "expected_outcome": "CAP_NET_RAW dropped → socket(AF_PACKET) returns EPERM. Raw packet capture / ARP-spoof primitives blocked.",
+      "notes": "Threat-model §3.5 mitigation #2. CAP_NET_RAW is the cap that enables packet spoofing and L2 attacks; runner has no network-debugging need so dropped."
+    },
+    {
+      "id": "SE-003",
+      "category": "cap_misuse",
+      "pattern": "syscall: open(\"/etc/shadow\", O_RDONLY) — requires CAP_DAC_READ_SEARCH if file not world-readable",
+      "expected_action": "block",
+      "expected_outcome": "CAP_DAC_READ_SEARCH dropped → open returns EACCES on root-owned files outside the runner's mount namespace. Also: read-only-rootfs prevents writes regardless.",
+      "notes": "DAC override primitives must be off — without them, even host-process compromises can't read root-owned files."
+    },
+    {
+      "id": "SE-004",
+      "category": "cap_misuse",
+      "pattern": "syscall: setuid(0) — requires CAP_SETUID",
+      "expected_action": "block",
+      "expected_outcome": "CAP_SETUID dropped → setuid returns EPERM. Even if the runner process is somehow elevated, it cannot become real root.",
+      "notes": "Rootless container UID 0 maps to unprivileged host UID, but in-container CAP_SETUID would still allow internal user-switching primitives — dropped."
+    },
+    {
+      "id": "SE-005",
+      "category": "cap_misuse",
+      "pattern": "syscall: ptrace(PTRACE_ATTACH, target_pid, NULL, NULL) — requires CAP_SYS_PTRACE",
+      "expected_action": "block",
+      "expected_outcome": "CAP_SYS_PTRACE dropped → ptrace returns EPERM. /proc/sys/kernel/yama/ptrace_scope=2 belt-and-suspenders.",
+      "notes": "CVE-2022-0492 was a cgroups-v1 escape that used ptrace primitives in concert; both vectors closed by dropping CAP_SYS_PTRACE."
+    },
+    {
+      "id": "SE-006",
+      "category": "cap_misuse",
+      "pattern": "syscall: init_module(...) — requires CAP_SYS_MODULE",
+      "expected_action": "block",
+      "expected_outcome": "CAP_SYS_MODULE dropped → init_module returns EPERM. Container cannot load kernel modules even if attacker controls kernel-object bytes.",
+      "notes": "Kernel-module loading is a direct host RCE if reachable. Always dropped."
+    },
+    {
+      "id": "SE-007",
+      "category": "seccomp_filter",
+      "pattern": "syscall: unshare(CLONE_NEWUSER | CLONE_NEWNS) — attempt new-namespace creation",
+      "expected_action": "block",
+      "expected_outcome": "Seccomp profile explicitly denies 'unshare' → ENOSYS (errno 38). Falco rule 'Namespace Creation Inside Container' fires.",
+      "notes": "Threat-model SE-2 (the named seccomp deny). CVE-2022-0492 (user-namespace cgroup escape) used unshare(CLONE_NEWUSER) as the privilege-escalation primitive; closed by seccomp deny."
+    },
+    {
+      "id": "SE-008",
+      "category": "seccomp_filter",
+      "pattern": "syscall: setns(fd, CLONE_NEWNS) — join host namespace",
+      "expected_action": "block",
+      "expected_outcome": "Seccomp denies 'setns' → ENOSYS. Even with a leaked host-namespace fd, the syscall fails.",
+      "notes": "setns is the 'enter another namespace' primitive — fundamental escape building block. Threat-model §3.5 #3."
+    },
+    {
+      "id": "SE-009",
+      "category": "seccomp_filter",
+      "pattern": "syscall: bpf(BPF_PROG_LOAD, &attr, sizeof(attr)) — load eBPF program",
+      "expected_action": "block",
+      "expected_outcome": "Seccomp denies 'bpf' → ENOSYS. Defends against eBPF-verifier-bypass class CVEs (e.g., CVE-2021-3490 ALU32 bounds-tracking).",
+      "notes": "eBPF has been a steady source of LPE CVEs (CVE-2021-3490, CVE-2021-31440, CVE-2022-23222). Disabling bpf() in seccomp eliminates the entire surface."
+    },
+    {
+      "id": "SE-010",
+      "category": "seccomp_filter",
+      "pattern": "syscall: keyctl(KEYCTL_ADD_KEY, ...) — kernel keyring manipulation",
+      "expected_action": "block",
+      "expected_outcome": "Seccomp denies 'keyctl' → ENOSYS. Defends against the kernel-keyring race-condition CVE class.",
+      "notes": "CVE-2016-0728, CVE-2022-1116 — kernel keyring has historically been an LPE target. Disabling keyctl() narrows attack surface."
+    },
+    {
+      "id": "SE-011",
+      "category": "seccomp_filter",
+      "pattern": "syscall: pivot_root(\"/newroot\", \"/oldroot\") — chroot-style root pivot",
+      "expected_action": "block",
+      "expected_outcome": "Seccomp denies 'pivot_root' → ENOSYS. Plus CAP_SYS_ADMIN is dropped (required for pivot_root) — double-lock.",
+      "notes": "pivot_root is the OCI runtime's own primitive for setting up the container — closed for in-container code so it can't be re-pointed."
+    },
+    {
+      "id": "SE-012",
+      "category": "seccomp_filter",
+      "pattern": "syscall: kexec_load(...) — load new kernel image",
+      "expected_action": "block",
+      "expected_outcome": "Seccomp denies 'kexec_load' → ENOSYS.",
+      "notes": "kexec is the 'soft reboot into a new kernel' primitive. Catastrophic if reachable; always blocked."
+    },
+    {
+      "id": "SE-013",
+      "category": "cgroup_escape",
+      "pattern": "Write to /sys/fs/cgroup/release_agent (cgroup-v1 notify_on_release abuse)",
+      "expected_action": "block",
+      "expected_outcome": "Read-only rootfs and read-only /sys mount → write returns EROFS. cgroup-v2-only configuration also closes the surface entirely.",
+      "notes": "CVE-2022-0492 — cgroup-v1 release_agent abuse for container escape. Tracee/falco rule 'cgroup notify_on_release' detects."
+    },
+    {
+      "id": "SE-014",
+      "category": "cgroup_escape",
+      "pattern": "Mount cgroup-v1 filesystem with rw inside container: mount -t cgroup -o rw none /tmp/cg",
+      "expected_action": "block",
+      "expected_outcome": "Seccomp denies mount + cap drop blocks. Even if attempted via direct syscall: EPERM.",
+      "notes": "Pre-condition for cgroup-release_agent abuse — the mount itself is the first lock."
+    },
+    {
+      "id": "SE-015",
+      "category": "cgroup_escape",
+      "pattern": "Fork bomb to exhaust container PID-cgroup: while(1) fork()",
+      "expected_action": "block",
+      "expected_outcome": "cgroup pids.max = 1000 → fork returns EAGAIN. Container is OOM-killed by the runner supervisor at PID-saturation threshold; host unaffected.",
+      "notes": "Threat-model SE-5 (DoS class). cgroup pids controller is the dedicated defense."
+    },
+    {
+      "id": "SE-016",
+      "category": "cgroup_escape",
+      "pattern": "Memory exhaustion: malloc(1 << 40) loop attempting host OOM",
+      "expected_action": "block",
+      "expected_outcome": "cgroup memory.max = 4GB → allocations beyond cap return ENOMEM. OOM-killer scoped to container only. Host memory pressure unchanged.",
+      "notes": "Threat-model SE-5 (the memory variant). Containerized OOM never reaches host."
+    },
+    {
+      "id": "SE-017",
+      "category": "kernel_cve",
+      "pattern": "Dirty Pipe (CVE-2022-0847): splice() a writable pipe over a read-only page-cache page to overwrite root-owned file",
+      "expected_action": "block",
+      "expected_outcome": "Host kernel patched (post-5.16.11 / 5.15.25 / 5.10.102). Verify spec asserts kernel >= patched minimum at runner startup; runner refuses to launch on unpatched kernel. Additionally, read-only root filesystem prevents the writeback target from existing inside the container's writable layer.",
+      "notes": "CVE-2022-0847 Dirty Pipe — Max Kellermann's discovery; widely-exploited container escape vector through 2022-2023. Mitigation is kernel patch + read-only rootfs."
+    },
+    {
+      "id": "SE-018",
+      "category": "kernel_cve",
+      "pattern": "nf_tables OOB write (CVE-2024-1086): trigger universe-after-free in nftables via crafted netlink message",
+      "expected_action": "block",
+      "expected_outcome": "Two locks: (a) seccomp denies socket(AF_NETLINK, ...) for non-runner-internal use; (b) host kernel patched (post-6.4.16 / 5.15.149 backport). Runner-startup kernel-version check refuses to run on unpatched.",
+      "notes": "CVE-2024-1086 — LPE-to-root via nftables. Heavily exploited 2024-2025. Egress-allowlist also makes the netlink AF socket unnecessary."
+    },
+    {
+      "id": "SE-019",
+      "category": "kernel_cve",
+      "pattern": "io_uring abuse (CVE-2023-2598): io_uring fixed-buffer registration race for kernel memory R/W",
+      "expected_action": "block",
+      "expected_outcome": "Seccomp denies io_uring_setup, io_uring_register, io_uring_enter → ENOSYS. io_uring entirely off in the runner (we don't need its perf benefits for read-only ingest).",
+      "notes": "CVE-2023-2598 + CVE-2024-0582 — io_uring is a recurring CVE source; disabling at seccomp level is the durable fix."
+    },
+    {
+      "id": "SE-020",
+      "category": "chroot_escape",
+      "pattern": "Classic chroot escape via fchdir(open(\".\")) after creating a sub-chroot and chdir-ing out",
+      "expected_action": "block",
+      "expected_outcome": "rootless container is not a chroot — it's a mount-namespace + user-namespace combo. Classic chroot tricks fail by design. Plus: CAP_SYS_CHROOT dropped → chroot() inside container returns EPERM.",
+      "notes": "The 'open the parent then escape' trick (Goldberg & Wagner 1996 'A Secure Environment for Untrusted Helper Applications') doesn't apply to namespaces — included as a sanity check that ops haven't downgraded to chroot."
+    },
+    {
+      "id": "SE-021",
+      "category": "chroot_escape",
+      "pattern": "mknod-then-read /dev/sda1 inside container",
+      "expected_action": "block",
+      "expected_outcome": "Devices cgroup denies mknod for block devices; CAP_MKNOD dropped. Even if a device node were created, read returns EACCES (we never grant access to host disks).",
+      "notes": "Direct host-disk read is a chroot-escape sibling — namespace-isolation alone doesn't stop it without device cgroup + cap drop."
+    },
+    {
+      "id": "SE-022",
+      "category": "chroot_escape",
+      "pattern": "Bind-mount host /etc via mount(\"/\", \"/tmp/host\", NULL, MS_BIND, NULL)",
+      "expected_action": "block",
+      "expected_outcome": "CAP_SYS_ADMIN dropped + seccomp denies mount → EPERM. Host filesystem invisible regardless.",
+      "notes": "Bind-mount-the-host is the 'I have CAP_SYS_ADMIN' escape primitive — closed by cap drop."
+    },
+    {
+      "id": "SE-023",
+      "category": "runtime_escape",
+      "pattern": "/proc/self/exe overwrite (CVE-2019-5736 runc-style): overwrite the runtime's host binary by writing through /proc/self/exe of the runc init process",
+      "expected_action": "block",
+      "expected_outcome": "Rootless container — there is no real root, /proc/self/exe of the host runtime maps to an unprivileged host UID's binary. Write to /proc/self/exe also returns ETXTBSY on a running binary. Plus: runc and Podman are post-1.0.0-rc6 / >=2.0 (patched).",
+      "notes": "CVE-2019-5736 (Adam Iwaniuk + Borys Popławski) — the canonical container-runtime CVE. Rootless is the architectural fix; runtime version is the patch lock."
+    },
+    {
+      "id": "SE-024",
+      "category": "runtime_escape",
+      "pattern": "Symlink race in runc volume mount (CVE-2024-21626): /proc/self/fd/N file descriptor leak to attach to host filesystem",
+      "expected_action": "block",
+      "expected_outcome": "runc >= 1.1.12 (patched); runner startup asserts version. Read-only rootfs + dropped caps form belt-and-suspenders.",
+      "notes": "CVE-2024-21626 'Leaky Vessels' — Snyk Jan 2024. Multi-runtime CVE (runc, BuildKit, Moby). Patching is the only fix; the runner enforces version at boot."
+    },
+    {
+      "id": "SE-025",
+      "category": "runtime_escape",
+      "pattern": "BuildKit GRPC mount-API abuse (CVE-2024-23651): race between SOURCE_DATE_EPOCH check and mount",
+      "expected_action": "block",
+      "expected_outcome": "We do not run BuildKit in the runner — runner is execute-not-build (D9: no npm install). BuildKit binary not present in runner image.",
+      "notes": "CVE-2024-23651 'Leaky Vessels' part 2. Mitigation is architectural: runner doesn't build images."
+    },
+    {
+      "id": "SE-026",
+      "category": "runtime_escape",
+      "pattern": "Docker socket exposed at /var/run/docker.sock — attempt to spawn a privileged sibling container",
+      "expected_action": "block",
+      "expected_outcome": "Docker socket NEVER mounted into the runner container. CI grep test asserts no '/var/run/docker.sock' volume in the runner Helm chart / docker-compose.",
+      "notes": "Docker-socket-mount is the 'instant root' antipattern. Forbidden by config; CI gate enforces."
+    },
+    {
+      "id": "SE-027",
+      "category": "memory_corruption",
+      "pattern": "Heap spray triggering libxml2 use-after-free (CVE-2023-39615) via crafted XML in a customer file",
+      "expected_action": "block",
+      "expected_outcome": "(a) Runner uses tree-sitter for parsing, not libxml2 — surface eliminated. (b) Even if a transitive dep pulls libxml2, version-pinning + Renovate auto-bump keeps post-patch (>=2.11.5). (c) RCE attempt within container hits seccomp + dropped-caps; falco detects /bin/sh exec and kills container.",
+      "notes": "CVE-2023-39615 — libxml2 UAF in xmlSchemaIDCFillNodeTables. Composability point: parser CVE in a transitive dep is mitigated by container-level defense even if the parser is exploited."
+    },
+    {
+      "id": "SE-028",
+      "category": "memory_corruption",
+      "pattern": "Stack overflow in OpenSSL ASN.1 parsing (CVE-2023-0286) via X.509 verification on a customer-supplied .pem",
+      "expected_action": "block",
+      "expected_outcome": "Runner does not invoke X.509 verification on customer-supplied keys — keys are surfaced as findings, not parsed. OpenSSL >= 3.0.8 (patched) in runner image regardless. Container defense kicks in for hypothetical RCE.",
+      "notes": "CVE-2023-0286 — OpenSSL X.400 GeneralName type-confusion. Architectural fix: don't parse customer cryptographic material."
+    },
+    {
+      "id": "SE-029",
+      "category": "memory_corruption",
+      "pattern": "Crafted GIF triggering libtiff buffer overflow (CVE-2023-0800) processed by an unintended dep chain",
+      "expected_action": "block",
+      "expected_outcome": "Runner ingests text only — binary asset files (images, PDFs, archives) are listed in findings but not parsed. libtiff is not in the runner image's dependency closure (asserted by CI: 'ldd runner | grep libtiff' empty).",
+      "notes": "CVE-2023-0800 — libtiff is a CVE-rich dep; architectural fix is to not pull it in."
+    },
+    {
+      "id": "SE-030",
+      "category": "proc_sys_misuse",
+      "pattern": "Read /proc/kallsyms to leak kernel addresses for ROP gadget construction",
+      "expected_action": "block",
+      "expected_outcome": "/proc/kallsyms returns all-zero addresses to unprivileged readers (kernel.kptr_restrict=2). Container is unprivileged → all zeroes returned. KASLR active.",
+      "notes": "Pre-exploit info-leak: even if kernel exploit is available, address leak is needed. kptr_restrict closes it."
+    },
+    {
+      "id": "SE-031",
+      "category": "proc_sys_misuse",
+      "pattern": "Write to /proc/sys/kernel/core_pattern to redirect coredumps to attacker-controlled handler",
+      "expected_action": "block",
+      "expected_outcome": "/proc/sys is read-only mounted; write returns EROFS. CAP_SYS_ADMIN dropped (required for sysctl writes). cgroup-v2 unified hierarchy denies this even when readable.",
+      "notes": "CVE-2022-0492 used core_pattern + release_agent in concert — both closed."
+    },
+    {
+      "id": "SE-032",
+      "category": "proc_sys_misuse",
+      "pattern": "Read /proc/<host-pid>/root/etc/shadow via leaked host PID namespace reference",
+      "expected_action": "block",
+      "expected_outcome": "PID namespace is isolated — /proc only shows in-container PIDs. There is no host-PID-namespace reference in scope. Plus: file mode 0640 owned by root would fail open even if reached (CAP_DAC_READ_SEARCH dropped).",
+      "notes": "Cross-PID-namespace /proc read is a classic shared-PID-ns escape; PID namespace isolation closes it."
+    },
+    {
+      "id": "SE-033",
+      "category": "runtime_escape",
+      "pattern": "Headless Chromium renderer-sandbox-escape via WebGL CVE-2024-0519 (V8 OOB read) on a Surface-audit page",
+      "expected_action": "block",
+      "expected_outcome": "Chromium pinned to post-122.0.6261.94 (patched). Chromium runs with --renderer-sandbox enabled (CI grep test enforces '--no-sandbox' is forbidden — threat-model §3.5 mitigation #9). Browser process is in a separate cgroup with the same seccomp+caps profile. RCE-via-render is contained.",
+      "notes": "Threat-model SE-6. CVE-2024-0519 V8 OOB read — one of the heavily exploited Chrome 0-days. Two locks: pin + sandbox flag."
+    }
+  ]
+}

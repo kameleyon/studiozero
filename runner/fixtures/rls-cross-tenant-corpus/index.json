@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "corpus": "rls-cross-tenant",
+  "version": "1.0.0",
+  "milestone": "M2",
+  "min_size_m2": 20,
+  "owner": "shield",
+  "co_owner": "verify",
+  "threat_model_ref": "architecture/threat-model.md TB-2 STRIDE-T/E + §3.5 RLS-cross-tenant subsection",
+  "trust_boundary_ref": ["TB-2", "TB-3"],
+  "consumer_test": "tests/security/rls-cross-tenant.spec.ts",
+  "notes": "Each pattern is a request from Tenant A's authenticated context attempting to read, mutate, or subscribe to data owned by Tenant B. The defense layer is Postgres Row Level Security (RLS) on every multi-tenant table: USING (tenant_id = (auth.jwt() ->> 'tenant_id')::uuid) with FORCE ROW LEVEL SECURITY on. Every table that carries tenant data is in scope: tenants, users, runs, findings, reviewer_results, audit_logs, billing_subscriptions, byok_secrets, runner_jwts, github_installations, github_pull_request_tracking. Test harness (Verify) mints two real JWTs (Tenant A and Tenant B), seeds known rows for each, then issues the pattern as Tenant A's session and asserts (a) the query returns 0 rows or 4xx, NEVER Tenant B's row, (b) audit_logs gets a Critical row for any non-allowed access shape, (c) the verify_run_jwt() function rejects cross-tenant claims. Pattern coverage: direct read, forged JWT claims, FK manipulation, BYOK decryption, Realtime subscribe, Edge Function service-role-key bypass. The service-role key NEVER leaves the Edge Function (Cipher Fix-1) — the runner uses a 5-min run-scoped JWT only.",
+  "patterns": [
+    {
+      "id": "RLS-001",
+      "category": "direct_read",
+      "pattern": "Tenant A's JWT presented; query: SELECT * FROM runs WHERE id = '<tenant_b_run_id>'",
+      "expected_action": "block",
+      "expected_outcome": "RLS USING clause on runs requires tenant_id = (auth.jwt() ->> 'tenant_id')::uuid. Tenant A's JWT carries tenant_id=A; runs.id row has tenant_id=B → 0 rows returned (NOT a 4xx, but an empty result, which is the correct RLS contract — leak-resistant). audit_logs row Critical via after-row-access trigger (counts the failed scan).",
+      "notes": "Canonical cross-tenant read. The USING clause is mandatory on every tenant-scoped table. Cipher v0.2 §4.1 enumerates the tables; CI tests via 'pg_policies' query that every public.* table has at least one RLS policy."
+    },
+    {
+      "id": "RLS-002",
+      "category": "direct_read",
+      "pattern": "Tenant A's JWT; query: SELECT * FROM findings WHERE run_id = '<tenant_b_run_id>'",
+      "expected_action": "block",
+      "expected_outcome": "findings.tenant_id (denormalized) checked against auth.jwt(); 0 rows. FK to runs is informational — RLS does NOT traverse FKs (intentional, per Supabase docs and Cipher §4.1 #3).",
+      "notes": "Denormalized tenant_id on every tenant-scoped child table per Cipher v0.2 §4.1 #3 — RLS must be self-sufficient per table; FK-traversal is too slow and error-prone for cross-tenant checks."
+    },
+    {
+      "id": "RLS-003",
+      "category": "direct_read",
+      "pattern": "Tenant A's JWT; PostgREST: GET /rest/v1/audit_logs?tenant_id=eq.<tenant_b_id>&select=*",
+      "expected_action": "block",
+      "expected_outcome": "PostgREST filter is honored ONLY in the SELECT projection — RLS still applies. Predicate ANDed with tenant_id=A; result is the empty intersection.",
+      "notes": "PostgREST filter-as-attack — common misunderstanding that ?tenant_id= can override RLS. It cannot."
+    },
+    {
+      "id": "RLS-004",
+      "category": "direct_read",
+      "pattern": "Tenant A's JWT; query via supabase-js .from('reviewer_results').select('*').eq('run_id', '<tenant_b_run_id>')",
+      "expected_action": "block",
+      "expected_outcome": "Client-library bypass — supabase-js routes through PostgREST with JWT in Authorization header → RLS applied at the database. 0 rows.",
+      "notes": "Library-as-shield concern: ensure RLS is applied at the database, not in the client library. Per design, supabase-js sends the JWT and the DB enforces."
+    },
+    {
+      "id": "RLS-005",
+      "category": "direct_read",
+      "pattern": "Tenant A's JWT; raw SQL via rpc('admin_get_run', {id: '<tenant_b_run_id>'})",
+      "expected_action": "block",
+      "expected_outcome": "RPC functions are SECURITY DEFINER only when explicitly created so; admin_get_run does not exist (no admin namespace RPC published). If it did, it would also gate on auth.jwt() ->> 'tenant_id'.",
+      "notes": "RPC-escalation: a SECURITY DEFINER function can bypass RLS — by policy, every SECURITY DEFINER function in our schema MUST do an explicit tenant check (asserted by Forge CI grep on 'CREATE OR REPLACE FUNCTION ... SECURITY DEFINER')."
+    },
+    {
+      "id": "RLS-006",
+      "category": "forged_jwt_claims",
+      "pattern": "Mint-runner-token for Tenant A with claim {tenant_id: '<tenant_a>', run_id: '<tenant_b_run_id>'}",
+      "expected_action": "block",
+      "expected_outcome": "Edge Function /mint-runner-token validates BOTH claims: run_id MUST belong to tenant_id. The function looks up runs WHERE id = run_id AND tenant_id = claim.tenant_id; mismatch → 403 + audit_logs Critical. The runner never sees a cross-tenant JWT.",
+      "notes": "Cipher v0.2 §4.4 mint-runner-token contract: claim.run_id MUST match claim.tenant_id in DB. Tested in tests/edge/mint-runner-token.spec.ts."
+    },
+    {
+      "id": "RLS-007",
+      "category": "forged_jwt_claims",
+      "pattern": "Tenant A presents a runner JWT they obtained legitimately for run_A, but the URL path is /runs/<tenant_b_run_id>/findings",
+      "expected_action": "block",
+      "expected_outcome": "verify_run_jwt() Postgres function (called by every runner-facing RPC) requires jwt.run_id == path.run_id. Mismatch → returns false → RPC raises 'invalid_run_jwt'.",
+      "notes": "JWT-run-scoping. Path parameter MUST match JWT claim. Cipher v0.2 §4.5."
+    },
+    {
+      "id": "RLS-008",
+      "category": "forged_jwt_claims",
+      "pattern": "Tenant A possesses an EXPIRED runner JWT for their own run; replays it; runs.status is 'completed' already",
+      "expected_action": "block",
+      "expected_outcome": "verify_run_jwt() also checks: exp > now() AND runs.status NOT IN ('completed','failed'). Both fail. The 5-minute expiry is the time-bound; the run-status gate prevents post-completion writes.",
+      "notes": "Replay outside expiry window AND outside lifecycle. Two locks per Cipher Fix-2."
+    },
+    {
+      "id": "RLS-009",
+      "category": "fk_manipulation",
+      "pattern": "Tenant A's runner; INSERT INTO findings (run_id, tenant_id, severity, msg) VALUES ('<tenant_b_run_id>', '<tenant_a_id>', 'Polish', '...')",
+      "expected_action": "block",
+      "expected_outcome": "RLS WITH CHECK clause requires tenant_id = (auth.jwt() ->> 'tenant_id')::uuid AND run_id IN (SELECT id FROM runs WHERE tenant_id = (auth.jwt() ->> 'tenant_id')::uuid). The subselect fails (tenant_b_run_id not visible to A) → CHECK fails → 23514 check_violation.",
+      "notes": "Cross-tenant FK manipulation: even with matching tenant_id on the new row, the run_id FK must point to a run within the same tenant. The WITH CHECK clause encodes this — Cipher v0.2 §4.1 #5."
+    },
+    {
+      "id": "RLS-010",
+      "category": "fk_manipulation",
+      "pattern": "Tenant A's runner; INSERT INTO reviewer_results (...) with run_id from tenant B and tenant_id from tenant A (same as RLS-009 but on a different table)",
+      "expected_action": "block",
+      "expected_outcome": "Same WITH CHECK pattern on reviewer_results. Forge migrates this clause to EVERY tenant-scoped child table via a generator (single source of truth).",
+      "notes": "Tested across all tenant-scoped child tables; the generator's golden output is in CI fixtures."
+    },
+    {
+      "id": "RLS-011",
+      "category": "fk_manipulation",
+      "pattern": "Tenant A; UPDATE findings SET tenant_id = '<tenant_b_id>' WHERE id = '<tenant_a_finding_id>' (move finding to tenant B)",
+      "expected_action": "block",
+      "expected_outcome": "RLS UPDATE policy: USING tenant_id = A (locates rows visible to A) AND WITH CHECK tenant_id = A (the post-update value must still be A). Both conditions in the same policy → tenant_id mutation rejected (CHECK fails).",
+      "notes": "Move-the-row-across-tenants attack. WITH CHECK on the post-image is the lock."
+    },
+    {
+      "id": "RLS-012",
+      "category": "byok_decrypt",
+      "pattern": "Tenant A's runner; calls SELECT vault.decrypt_byok('<tenant_a>', '<tenant_b_secret_id>') — decrypt a BYOK secret belonging to tenant B",
+      "expected_action": "block",
+      "expected_outcome": "vault.decrypt_byok() is SECURITY DEFINER but starts with: PERFORM 1 FROM byok_secrets WHERE id = secret_id AND tenant_id = tenant; IF NOT FOUND THEN RAISE EXCEPTION 'unauthorized'. Cross-tenant lookup returns no row → exception → audit_logs Critical.",
+      "notes": "BYOK decryption MUST enforce tenant ownership inside the SECURITY DEFINER function. Cipher v0.2 §4.4 BYOK contract."
+    },
+    {
+      "id": "RLS-013",
+      "category": "byok_decrypt",
+      "pattern": "Tenant A; vault.decrypt_byok(<tenant_a>, <tenant_a_secret_id>) — legitimate — but with a runner JWT for a DIFFERENT run within tenant A",
+      "expected_action": "block",
+      "expected_outcome": "vault.decrypt_byok also validates that auth.jwt() ->> 'run_id' has runs.run_byok_grant = true for this specific secret_id. Cross-run within same tenant is also rejected.",
+      "notes": "Per-run BYOK grant. Even within-tenant, the runner's BYOK access is per-run-explicit, not tenant-wide."
+    },
+    {
+      "id": "RLS-014",
+      "category": "byok_decrypt",
+      "pattern": "Tenant A; attempt to vault.decrypt_byok() with an injected tenant_id parameter: vault.decrypt_byok('<spoofed_tenant_uuid>', '<tenant_b_secret>')",
+      "expected_action": "block",
+      "expected_outcome": "vault.decrypt_byok ignores the function-arg tenant_id and reads it from auth.jwt() instead (function arg is informational/logging only). Belt-and-suspenders: even if caller forges tenant_id arg, the JWT claim wins.",
+      "notes": "Trust-the-JWT-not-the-arg principle. Cipher v0.2 §4.4 explicit anti-pattern callout."
+    },
+    {
+      "id": "RLS-015",
+      "category": "realtime_subscribe",
+      "pattern": "Tenant A's JWT; supabase.channel('runs:<tenant_b_run_id>:findings').on('postgres_changes', ...).subscribe()",
+      "expected_action": "block",
+      "expected_outcome": "Supabase Realtime applies RLS to the channel filter: the subscribed-to rows must pass RLS for the subscriber's JWT. Tenant A's JWT against tenant B's run → no events delivered (silent denial).",
+      "notes": "Realtime RLS — Supabase docs 'Authorization with Realtime'. Tested in tests/realtime/realtime-rls.spec.ts."
+    },
+    {
+      "id": "RLS-016",
+      "category": "realtime_subscribe",
+      "pattern": "Tenant A; subscribes to the 'public:audit_logs' broadcast channel with a wildcard filter",
+      "expected_action": "block",
+      "expected_outcome": "audit_logs has RLS USING tenant_id = (auth.jwt() ->> 'tenant_id')::uuid; Realtime only emits rows the subscriber can SELECT. Cross-tenant audit_logs rows never delivered.",
+      "notes": "Wildcard subscribe still gated by RLS — Supabase Realtime is RLS-aware. Trust-but-verify with a published test in our suite."
+    },
+    {
+      "id": "RLS-017",
+      "category": "realtime_subscribe",
+      "pattern": "Tenant A constructs a Realtime channel name including tenant B's id: 'runs:<tenant_b>:lifecycle' and presents only their own JWT",
+      "expected_action": "block",
+      "expected_outcome": "Channel-name validation is RLS-enforced on every published row — channel name is presentation-only and gives no implicit access. No tenant B rows pass A's RLS predicates → silent.",
+      "notes": "Channel-name-as-claim attack. Channel name is a label, not an authorization token. Realtime checks the data, not the name."
+    },
+    {
+      "id": "RLS-018",
+      "category": "service_role_bypass",
+      "pattern": "Customer tenant A attempts to call Edge Function /admin-run-summary with their JWT, expecting service-role-key bypass to surface tenant B's data",
+      "expected_action": "block",
+      "expected_outcome": "Edge Functions use service-role-key ONLY for explicitly cross-tenant operations (e.g., billing-aggregation). /admin-run-summary doesn't exist as a customer-callable function; admin functions are gated by 'role=admin' claim in the JWT AND a hardcoded list of admin user IDs.",
+      "notes": "Cipher v0.2 Fix-1: the service-role-key never leaves the Edge Function runtime. Customer-callable functions ALWAYS use the customer's JWT, not service-role."
+    },
+    {
+      "id": "RLS-019",
+      "category": "service_role_bypass",
+      "pattern": "Tenant A's runner crafts an Authorization header impersonating service-role: 'Authorization: Bearer <stale-service-role-key-snapshot>'",
+      "expected_action": "block",
+      "expected_outcome": "Service-role-key rotation: monthly (Cipher secrets-rotation-runbook §3.2). Stale keys reject at PostgREST JWT verification. Plus: egress from runner is to /rest/v1 NOT direct DB, so the JWT validation runs there.",
+      "notes": "Stale-key attack: rotation + key-version-on-token closes."
+    },
+    {
+      "id": "RLS-020",
+      "category": "service_role_bypass",
+      "pattern": "Edge Function with service-role-key incorrectly used to surface cross-tenant data: function body lacks an explicit tenant_id filter and trusts customer-provided filter",
+      "expected_action": "block",
+      "expected_outcome": "Forge CI: every Edge Function with SUPABASE_SERVICE_ROLE_KEY in scope MUST contain an explicit 'tenant_id = body.tenant_id' filter; the CI lint catches the missing filter at PR time. Plus: tenant_id comes from auth.jwt() inside the function, never from request body.",
+      "notes": "Cipher v0.2 §4.4 anti-pattern (service-role-key without explicit filter). Lint rule + grep gate at CI."
+    },
+    {
+      "id": "RLS-021",
+      "category": "direct_read",
+      "pattern": "Tenant A; SELECT id FROM tenants — try to enumerate tenant IDs across the whole platform",
+      "expected_action": "block",
+      "expected_outcome": "tenants table RLS: USING (id = (auth.jwt() ->> 'tenant_id')::uuid). Each user sees their own tenant row only.",
+      "notes": "Enumeration prevention. Even non-data columns leak organizational structure — RLS scopes the tenants table itself."
+    },
+    {
+      "id": "RLS-022",
+      "category": "forged_jwt_claims",
+      "pattern": "Tenant A signs their own JWT with a leaked anon-key and sets claim {tenant_id: '<tenant_b>'}",
+      "expected_action": "block",
+      "expected_outcome": "Anon-key is for unauthenticated reads only — it CANNOT mint authenticated JWTs. Real user JWTs are signed by Supabase Auth's JWT_SECRET, which never leaves the Auth service. Forged JWTs fail signature verification at PostgREST.",
+      "notes": "Mistake: anon-key vs JWT_SECRET confusion. The anon-key is the JWT used for unauth, not the signing secret."
+    },
+    {
+      "id": "RLS-023",
+      "category": "realtime_subscribe",
+      "pattern": "Tenant A; presence channel: supabase.channel('presence:tenant-<tenant_b>').track({ user: 'a' })",
+      "expected_action": "block",
+      "expected_outcome": "Presence channels are authorized by realtime.authorization configs; cross-tenant presence channel rejected at WS handshake (Supabase 2024 Realtime auth update).",
+      "notes": "Presence-cross-tenant. Realtime Presence respects channel-level authorization since Realtime Authorization GA."
+    }
+  ]
+}

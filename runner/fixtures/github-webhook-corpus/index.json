@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "corpus": "github-webhook",
+  "version": "1.0.0",
+  "milestone": "M2",
+  "min_size_m2": 10,
+  "owner": "shield",
+  "co_owner": "forge",
+  "threat_model_ref": "architecture/threat-model.md TB-13 + §4 corpus inventory line 426",
+  "trust_boundary_ref": ["TB-13"],
+  "consumer_test": "tests/security/github-webhook-corpus.spec.ts",
+  "notes": "Each pattern is a request POSTed to the GitHub-webhook Edge Function (Cipher Fix-5: webhook endpoint at supabase.functions/github-webhook). The Edge Function MUST: (1) verify X-Hub-Signature-256 HMAC against the App-level webhook secret using a constant-time compare; (2) verify the delivery is not a replay (X-GitHub-Delivery UUID idempotency-key + dedup table github_webhook_deliveries with 7-day retention); (3) verify the installation_id in the payload matches a row in github_installations that belongs to the user owning the repo/PR (cross-installation isolation); (4) for events that change run state (pull_request.merged, pull_request.closed, installation.deleted), additionally validate via GitHub App API (server-side) before mutating state. Expected: forged/replayed/stale events return 4xx and emit audit_logs Critical. EXAMPLE_FAKE_* placeholders used for any signatures, secrets, IDs.",
+  "patterns": [
+    {
+      "id": "GHW-001",
+      "category": "signature_mismatch",
+      "pattern": "POST /functions/v1/github-webhook with header X-Hub-Signature-256: sha256=0000000000000000000000000000000000000000000000000000000000000000 (all-zero) over a valid pull_request body",
+      "expected_action": "block",
+      "expected_outcome": "HMAC compute over body with our App webhook secret yields a non-zero digest; timing-safe compare fails → 401. audit_logs row Critical with delivery_id, event_type, signature_seen, signature_expected_prefix.",
+      "notes": "Threat-model TB-13 STRIDE-S row 181. All-zero sig is the trivial probe — confirms the verifier actually runs."
+    },
+    {
+      "id": "GHW-002",
+      "category": "signature_mismatch",
+      "pattern": "POST with body modified after signature: original body signed legitimately, then 1 byte changed in the action field ('opened' → 'closed') with the same signature header",
+      "expected_action": "block",
+      "expected_outcome": "Recomputed HMAC differs from the presented signature (single-byte change cascades through HMAC-SHA256) → 401.",
+      "notes": "Tamper-after-sign — canonical reason HMAC exists. Tested with bit-flip mutator in Verify spec."
+    },
+    {
+      "id": "GHW-003",
+      "category": "replay",
+      "pattern": "Replay a legitimate webhook by re-POSTing the captured body + signature + X-GitHub-Delivery 5 minutes after the original delivery succeeded",
+      "expected_action": "block",
+      "expected_outcome": "X-GitHub-Delivery UUID is in github_webhook_deliveries table (idempotency); INSERT ON CONFLICT DO NOTHING returns no row; handler short-circuits with 200 (idempotent acknowledgement) but emits NO state change. audit_logs row at Info ('idempotent_replay') with the delivery_id.",
+      "notes": "Idempotency-key replay defense — Cipher v0.2 §4.6 webhook dedup table. 200 (not 4xx) because GitHub retries on non-200; we want one-and-done semantics."
+    },
+    {
+      "id": "GHW-004",
+      "category": "replay",
+      "pattern": "Replay an OLD legitimate webhook (90 days ago, beyond the 7-day dedup retention window)",
+      "expected_action": "block",
+      "expected_outcome": "Delivery_id no longer in dedup table (>7-day retention). The handler also checks payload-timestamp: webhook bodies include a 'ts' field from GitHub. If ts < now() - 5 minutes → 401 'webhook_stale'. (GitHub's own retry window is 23 hours; anything older is suspicious.)",
+      "notes": "Long-replay attack. Two locks: dedup retention (data) + timestamp window (semantics). The timestamp check is the durable one (works even when dedup table is purged)."
+    },
+    {
+      "id": "GHW-005",
+      "category": "forged_installation",
+      "pattern": "Valid HMAC over body claiming installation.deleted for installation_id=<UNOWNED_INSTALLATION_ID> — attacker has somehow learned the webhook secret AND signs correctly, but the installation belongs to a different account",
+      "expected_action": "block",
+      "expected_outcome": "After signature passes, handler looks up installation_id in github_installations: if no row → 404 + audit Critical. If row exists but tenant_id ≠ payload.sender.id-derived-tenant: handler defends by FORCING a server-side GitHub API call: GET /app/installations/<id>; the response must match the payload's account.id. Mismatch → 401 + audit Critical.",
+      "notes": "Webhook-secret-leak resilience. Even if the secret is leaked, payload-to-installation correlation through GitHub's own API is the second lock. Cipher v0.2 §4.7."
+    },
+    {
+      "id": "GHW-006",
+      "category": "forged_installation",
+      "pattern": "Forged installation.deleted for installation_id of tenant A (legitimately owned), attempting to free-tier-grace-collapse tenant A's pending runs",
+      "expected_action": "block",
+      "expected_outcome": "Even a legitimately-formed installation.deleted event triggers a 'soft deletion': github_installations.status='pending_delete', NOT immediate. Runs in-flight finish; new runs blocked. The actual hard delete waits 7 days. Server-side GitHub-API confirmation must also see installation as not-installed.",
+      "notes": "Soft-delete to defeat malicious DoS even from legitimate-shape webhook. Customer-recoverable for 7 days."
+    },
+    {
+      "id": "GHW-007",
+      "category": "forged_pr_merged",
+      "pattern": "Forged pull_request.closed.merged=true for PR #42 of repo not owned by the installation that signed the webhook",
+      "expected_action": "block",
+      "expected_outcome": "Handler verifies: payload.repository.id is in the installation's repository list (per github_installations.repository_ids cached column, refreshed on installation.repositories events). Mismatch → 401 + audit. Server-side GitHub-API double-check for sensitive ops (audit completion).",
+      "notes": "Cross-repo forge: the signature secret is per-App, but each installation is scoped. Cipher v0.2 §4.7."
+    },
+    {
+      "id": "GHW-008",
+      "category": "forged_pr_merged",
+      "pattern": "Forged pull_request.closed.merged=true for a PR# that doesn't exist in our tracking table (github_pull_request_tracking)",
+      "expected_action": "block",
+      "expected_outcome": "Handler looks up payload.pull_request.id in github_pull_request_tracking: if not found OR status='completed' → no state change, 200 idempotent. If found AND status='pending', then PROCEED with merge-tracking AFTER server-side GitHub-API verification of merge.",
+      "notes": "Stale-PR tracking. Cipher v0.2 §4.8 — the tracking row is the authoritative state; webhook is a trigger to verify, not authoritative on its own."
+    },
+    {
+      "id": "GHW-009",
+      "category": "stale_tracking",
+      "pattern": "Replay an OLD pull_request.opened event for a tracking row that was deleted (PR closed > 90 days ago, tracking row archived)",
+      "expected_action": "block",
+      "expected_outcome": "Lookup fails → 200 idempotent + audit_logs Info. No state mutation. GitHub-API verification would also confirm PR closed → no audit triggered.",
+      "notes": "Archival-stale replay. Idempotent semantics preserved across the archive boundary."
+    },
+    {
+      "id": "GHW-010",
+      "category": "stale_tracking",
+      "pattern": "Forged sequence: webhook stream of pull_request.opened, .review_requested, .closed.merged for a PR# in rapid succession (race against state machine)",
+      "expected_action": "block",
+      "expected_outcome": "Each delivery_id is unique → all pass dedup. State machine on github_pull_request_tracking is row-locked (SELECT … FOR UPDATE inside transaction): rapid races serialize. Server-side GitHub API call on the .closed.merged step independently verifies merge.",
+      "notes": "Race-condition stale-tracking exploit. Row-level locking + serializable transaction is the defense."
+    },
+    {
+      "id": "GHW-011",
+      "category": "signature_mismatch",
+      "pattern": "POST with X-Hub-Signature-256 header MISSING entirely (no header at all)",
+      "expected_action": "block",
+      "expected_outcome": "Edge Function rejects: 'missing_signature_header' → 401. Never reaches body processing.",
+      "notes": "Missing-header probe. Header-required gate is the first check."
+    },
+    {
+      "id": "GHW-012",
+      "category": "signature_mismatch",
+      "pattern": "POST with X-Hub-Signature (SHA1) instead of X-Hub-Signature-256 (sha1 is deprecated by GitHub for App webhooks)",
+      "expected_action": "block",
+      "expected_outcome": "Handler requires X-Hub-Signature-256 specifically (no sha1 fallback). Missing-header path → 401.",
+      "notes": "SHA1-only deliveries are NOT accepted. GitHub's App-webhook spec mandates sha256 (since Sept 2020 GA)."
+    }
+  ]
+}

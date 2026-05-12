@@ -4,17 +4,23 @@
 
 Each subdirectory is one corpus; each corpus has an `index.json` of adversarial patterns. Verify's tests iterate the `patterns[]` array and assert the runner / gateway / verifier behaves per `expected_action`.
 
-## Corpora at M1
+## Corpora at M1 + M2
 
-| Corpus           | Path                                 | M1 size | M2 size | Threat-model ref    | Verify test                                      |
-| ---------------- | ------------------------------------ | ------: | ------: | ------------------- | ------------------------------------------------ |
-| Prompt injection | `prompt-injection-corpus/index.json` |      30 |     200 | §3.2 PI-1..PI-7     | `tests/security/prompt-injection-corpus.spec.ts` |
-| SSRF             | `ssrf-corpus/index.json`             |      32 |     100 | §3.1 SSRF-1..SSRF-8 | `tests/security/ssrf-egress.spec.ts`             |
-| Path traversal   | `path-traversal-corpus/index.json`   |      32 |     32+ | §3.4 PT-1..PT-7     | `tests/security/path-traversal-fuzz.spec.ts`     |
-| JWT tampering    | `jwt-tampering-corpus/index.json`    |      32 |     32+ | TB-1/TB-3 STRIDE-T  | `tests/security/jwt-tampering.spec.ts`           |
-| Stripe webhook   | `stripe-webhook-corpus/index.json`   |      31 |     31+ | TB-10/TB-11         | `tests/security/stripe-webhook-corpus.spec.ts`   |
+| Corpus           | Path                                 | M1 size | Current | Min M2 | Threat-model ref       | Verify test                                      |
+| ---------------- | ------------------------------------ | ------: | ------: | -----: | ---------------------- | ------------------------------------------------ |
+| Prompt injection | `prompt-injection-corpus/index.json` |      30 |     219 |    200 | §3.2 PI-1..PI-7        | `tests/security/prompt-injection-corpus.spec.ts` |
+| SSRF             | `ssrf-corpus/index.json`             |      32 |     32+ |    100 | §3.1 SSRF-1..SSRF-8    | `tests/security/ssrf-egress.spec.ts`             |
+| Path traversal   | `path-traversal-corpus/index.json`   |      32 |     32+ |    32+ | §3.4 PT-1..PT-7        | `tests/security/path-traversal-fuzz.spec.ts`     |
+| JWT tampering    | `jwt-tampering-corpus/index.json`    |      32 |     32+ |    32+ | TB-1/TB-3 STRIDE-T     | `tests/security/jwt-tampering.spec.ts`           |
+| Stripe webhook   | `stripe-webhook-corpus/index.json`   |      31 |     31+ |    31+ | TB-10/TB-11            | `tests/security/stripe-webhook-corpus.spec.ts`   |
+| Sandbox escape   | `sandbox-escape-corpus/index.json`   |       — |      33 |     30 | §3.5 SE-1..SE-8        | `tests/security/sandbox-escape-top30.spec.ts`    |
+| Secret exfil     | `secret-exfil-corpus/index.json`     |       — |      45 |     40 | §3.3 EXF-1..EXF-4      | `tests/security/secret-exfil-corpus.spec.ts`     |
+| RLS cross-tenant | `rls-cross-tenant-corpus/index.json` |       — |      23 |     20 | TB-2 STRIDE-T/E + §3.5 | `tests/security/rls-cross-tenant.spec.ts`        |
+| GitHub webhook   | `github-webhook-corpus/index.json`   |       — |      12 |     10 | TB-13 + §4 line 426    | `tests/security/github-webhook-corpus.spec.ts`   |
 
-Other corpora produced by sibling owners are referenced in `architecture/test-strategy.md` §2 (sandbox-escape, secret-exfil, github-webhook, cli-tamper, default-branch-fuzz, rls-cross-tenant). They land per their own milestones.
+**M2 Batch 1 (Shield):** the bottom four corpora land at M2 to satisfy the exit-gate requirements in `sprint/milestone-M2.md` lines 63–64 + 119–120: PI ≥200, sandbox-escape top-30. Secret-exfil and RLS cross-tenant are produced now to compose with Verify's M2 test additions; github-webhook lifts the §4 line-426 corpus-inventory line item out of M1's "stub-or-defer" state.
+
+Remaining corpora (cli-tamper, default-branch-fuzz) land per their own milestones (M3 / V1.5) per `architecture/test-strategy.md` §2.
 
 ## How Verify consumes these
 
@@ -67,8 +73,8 @@ Failures are PR-blocking, never softened. A corpus pattern that no longer reprod
 
 ## Roadmap
 
-- **M1 (this PR):** five corpora live, 32-of-each minimum, CI green.
-- **M2:** prompt-injection grows to ≥200 patterns; sandbox-escape lands per PRD §16 M2 gate; secret-exfil-corpus from Cipher; stripe-webhook patterns receive the M3 idempotency expansion.
+- **M1:** five corpora live, 32-of-each minimum, CI green.
+- **M2 (Batch 1, this PR):** prompt-injection at 219 patterns (target ≥200) across 16 categories including new tool-call-forgery, multi-language obfuscation, indirect-build-artifact, chain-of-thought hijack, payload-smuggling-via-legitimate-code, multi-turn-drift, and tool-output-poisoning families; sandbox-escape top-30 (33 patterns) covering caps, seccomp, cgroup, kernel CVEs (Dirty Pipe CVE-2022-0847, CVE-2024-1086, CVE-2023-2598, CVE-2024-21626 Leaky Vessels), chroot, runtime, memory-corruption, and /proc-/sys misuse; secret-exfil at 45 patterns across 10 channels (Sentry, PostHog, Resend, LLM output, tool output, network DNS/ICMP/HTTP, mistyped-API, headers, cache, symlink); rls-cross-tenant at 23 patterns; github-webhook at 12 patterns.
 - **M3:** external pentest informs additional patterns; cli-tamper-corpus lands.
 - **V1.5:** default-branch-fuzz-corpus lands; auto-PR-flow patterns added.
 
