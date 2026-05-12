@@ -58,6 +58,14 @@ export default defineConfig({
         "apps/runner/src/reviewers/**/*.ts",
         "apps/web/lib/sentry-redaction.ts",
         "apps/web/lib/ai-disclosure.ts",
+        // M2 Batch 1 Forge — Verify exercises these via mocked Stripe SDK
+        // + in-memory Supabase shims; coverage ≥75% statement per the
+        // M2 Batch 2 brief.
+        "apps/web/app/api/webhooks/stripe/route.ts",
+        "apps/web/app/api/webhooks/github/route.ts",
+        "apps/web/app/api/billing/checkout-session/route.ts",
+        "apps/web/app/api/billing/reconcile/route.ts",
+        "apps/web/app/api/billing/portal/route.ts",
         "architecture/schemas/score_engine.v1.json",
       ],
       exclude: [
@@ -65,9 +73,9 @@ export default defineConfig({
         "**/node_modules/**",
         "**/coverage/**",
         "**/.next/**",
-        // apps/web also runs its own next-typed coverage — we don't
-        // double-count the React tree here.
-        "apps/web/app/**",
+        // apps/web React tree — covered by next-typed test lane.
+        "apps/web/app/**/page.tsx",
+        "apps/web/app/**/layout.tsx",
         "apps/web/components/**",
         "apps/runner/tests/**",
         // audit-event.v1.ts is a *types* file with one tiny `assertNever`

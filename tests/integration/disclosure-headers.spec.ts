@@ -46,6 +46,27 @@ const NEXT_CONFIG = path.join(ROOT, "apps/web/next.config.ts");
 const AI_DISCLOSURE_LIB = path.join(ROOT, "apps/web/lib/ai-disclosure.ts");
 const LAYOUT_PATH = path.join(ROOT, "apps/web/app/layout.tsx");
 
+// --- M2 Batch 1 routes added by Forge (a7396fc). Each must declare the
+//     X-AI-Generated header via the shared `aiDisclosureHeaders` constant.
+const STRIPE_WEBHOOK_ROUTE = path.join(
+  ROOT,
+  "apps/web/app/api/webhooks/stripe/route.ts",
+);
+const CHECKOUT_SESSION_ROUTE = path.join(
+  ROOT,
+  "apps/web/app/api/billing/checkout-session/route.ts",
+);
+const RECONCILE_ROUTE = path.join(ROOT, "apps/web/app/api/billing/reconcile/route.ts");
+const PORTAL_ROUTE = path.join(ROOT, "apps/web/app/api/billing/portal/route.ts");
+const PRICING_PAGE = path.join(ROOT, "apps/web/app/pricing/page.tsx");
+
+const M2_NEW_ROUTES: ReadonlyArray<{ name: string; file: string }> = [
+  { name: "/api/webhooks/stripe", file: STRIPE_WEBHOOK_ROUTE },
+  { name: "/api/billing/checkout-session", file: CHECKOUT_SESSION_ROUTE },
+  { name: "/api/billing/reconcile", file: RECONCILE_ROUTE },
+  { name: "/api/billing/portal", file: PORTAL_ROUTE },
+];
+
 const WEB_NODE_MODULES = path.join(ROOT, "apps/web/node_modules");
 const WEB_DEPS_INSTALLED = existsSync(WEB_NODE_MODULES);
 
@@ -177,6 +198,89 @@ describe("disclosure-headers — unhappy paths + structural drift guards", () =>
     const badRoute = "export function GET() { return new Response('x'); }";
     expect(/aiDisclosureHeaders/.test(badRoute)).toBe(false);
   });
+});
+
+// ---------------------------------------------------------------------------
+// M2 Batch 1 — new billing + webhook routes (Forge a7396fc).
+//
+// Source-level assertions only: the route handlers fabricate Response objects
+// directly (not via Next's default headers() wrapper) and MUST import the
+// canonical `aiDisclosureHeaders` constant + spread it into every Response.
+// Runtime-import + invoke is gated on apps/web deps + a stack of mocks for
+// Stripe + Supabase — covered in the M2 Batch 2 sibling specs. Here we
+// only need the structural binary "header is wired".
+// ---------------------------------------------------------------------------
+
+describe("disclosure-headers — M2 Batch 1 routes (Forge a7396fc)", () => {
+  it.each(M2_NEW_ROUTES)(
+    "$name route imports aiDisclosureHeaders from lib/ai-disclosure (Art. 50 source-of-truth)",
+    ({ file }) => {
+      const src = readFileSync(file, "utf-8");
+      // 1) Imports the named export — not a hand-typed string.
+      expect(src).toMatch(/from\s+["'][^"']*\/lib\/ai-disclosure["']/);
+      expect(src).toMatch(/aiDisclosureHeaders/);
+    },
+  );
+
+  it.each(M2_NEW_ROUTES)(
+    "$name route spreads aiDisclosureHeaders into every Response (no hand-typed X-AI-Generated values)",
+    ({ file }) => {
+      const src = readFileSync(file, "utf-8");
+      // Every Response constructed in the handler spreads aiDisclosureHeaders.
+      // Concretely: the count of `new Response(` declarations should be
+      // ≤ the count of `...aiDisclosureHeaders` spreads (allowing the same
+      // spread to be applied to multiple Response paths via a helper).
+      const newResponseCount = (src.match(/new Response\(/g) ?? []).length;
+      const spreadCount = (src.match(/\.\.\.aiDisclosureHeaders/g) ?? []).length;
+      expect(newResponseCount).toBeGreaterThan(0);
+      // Either every Response carries the spread directly OR the route
+      // funnels Responses through a `json()` helper that does (checkout +
+      // reconcile + portal use this pattern; the webhook does not).
+      const hasJsonHelper = /function json\(/.test(src);
+      if (hasJsonHelper) {
+        expect(spreadCount).toBeGreaterThan(0);
+      } else {
+        // Webhook route — every Response inlines the spread.
+        expect(spreadCount).toBeGreaterThanOrEqual(newResponseCount);
+      }
+    },
+  );
+
+  it.each(M2_NEW_ROUTES)(
+    "$name route never declares a literal X-AI-Generated value (only via lib constant)",
+    ({ file }) => {
+      const src = readFileSync(file, "utf-8");
+      // Match patterns like `"X-AI-Generated": "anything-else"` —
+      // there should be ZERO literal occurrences anywhere outside imports.
+      // The lib constants live in ai-disclosure.ts; routes only import.
+      const literal = src.match(/X-AI-Generated["']\s*:\s*["']([^"']+)["']/);
+      expect(literal).toBeNull();
+    },
+  );
+
+  it("/pricing page (HTML) is covered by the layout.tsx Metadata.other path", () => {
+    // The /pricing page exists and inherits from app/layout.tsx Metadata,
+    // which carries `<meta name="ai-generated" content="studio-zero">`.
+    // We assert the page file exists and the layout.tsx wiring (already
+    // covered above) is what fans out to it — no per-page meta-tag drift.
+    expect(existsSync(PRICING_PAGE)).toBe(true);
+  });
+
+  it("next.config.ts source/path catches the new /api/billing/* + /api/webhooks/stripe globs", () => {
+    const src = readFileSync(NEXT_CONFIG, "utf-8");
+    // source: "/:path*" covers EVERY path including the new M2 routes;
+    // this re-confirms the catch-all stays in place.
+    expect(src).toMatch(/source:\s*["']\/?:path\*["']/);
+    // And the header itself is X-AI-Generated: studio-zero.
+    expect(src).toMatch(/X-AI-Generated/);
+    expect(src).toMatch(/studio-zero/);
+  });
+
+  // Runtime handler-level invocation for the M2 webhook + billing routes
+  // requires mocking @supabase/ssr cookies + the server-only import +
+  // the Stripe SDK. The sibling specs (stripe-webhook-handler.spec.ts,
+  // stripe-checkout-flow.spec.ts) carry that full mock stack; here we only
+  // verify the structural wiring is in place at the file-source level.
 });
 
 // Restore env for any subsequent tests.
