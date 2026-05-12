@@ -1,0 +1,199 @@
+name: CI
+
+# ──────────────────────────────────────────────────────────────────────
+# Studio Zero — master CI workflow (Pipeline, Phase 9 M0).
+#
+# Enforces every PR-blocking M0 exit gate from architecture/test-strategy.md
+# §1 Layer matrix + sprint/milestone-M0.md exit-gate list, against Forge's
+# Next.js 15 scaffold at apps/web/ (commit 6b97732).
+#
+# Triggers:
+#   - pull_request against main → all jobs PR-blocking
+#   - push to main             → regression guard (same jobs run)
+#
+# Conventions:
+#   - All third-party actions SHA-pinned (motionmax B-NEW-5 / Wave 1).
+#   - Node 24 LTS — aligned with Vercel runtime + apps/web/package.json.
+#   - Jobs run in parallel; e2e/load deferred to M1+ (test-strategy §6 R1/R2).
+# ──────────────────────────────────────────────────────────────────────
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Cancel in-progress runs on feature branches; never cancel on main
+  # (per motionmax lessons-learned: mid-deploy cancel = partial state).
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ── apps/web: TypeScript type check (test-strategy §1 Unit gate) ────
+  typecheck:
+    name: Typecheck (apps/web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install (apps/web)
+        working-directory: apps/web
+        run: npm install --legacy-peer-deps
+      - name: tsc --noEmit
+        working-directory: apps/web
+        run: npm run typecheck
+
+  # ── apps/web: ESLint (test-strategy §1 Unit gate; Halo a11y import) ─
+  lint:
+    name: Lint (apps/web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install (apps/web)
+        working-directory: apps/web
+        run: npm install --legacy-peer-deps
+      - name: ESLint
+        working-directory: apps/web
+        run: npm run lint
+
+  # ── Schema validation — M0 exit gate "pnpm test schema:validate" ───
+  # ajv compiles every file in architecture/schemas/. Wired here as
+  # `npm test -- schema-validate` so the same runner script services
+  # both local + CI (Verify owns the test glue; Pipeline owns the gate).
+  schema-validate:
+    name: Schema Validate (architecture/schemas)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Install (root)
+        run: npm install
+      - name: Run schema-validate suite
+        run: npm test -- schema-validate
+
+  # ── Score engine — M0 exit gate "pnpm test score-engine" ───────────
+  # Vitest runs score_v1(findings) === expected for every row in
+  # architecture/schemas/score_engine.v1.fixtures.json (test-strategy §3 M0).
+  score-engine:
+    name: Score Engine (Vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Install (root)
+        run: npm install
+      - name: Run score-engine suite
+        run: npm test -- score-engine
+
+  # ── apps/web build — next build must succeed for deploy gate ───────
+  build:
+    name: Build (apps/web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    needs: [typecheck, lint]
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install (apps/web)
+        working-directory: apps/web
+        run: npm install --legacy-peer-deps
+      - name: next build
+        working-directory: apps/web
+        run: npm run build
+
+  # ── Inline secret scan over the PR diff ─────────────────────────────
+  # Belt-and-braces with the dedicated gitleaks workflow + husky pre-commit.
+  # This grep gate is fast (no action download) and fails fast on the most
+  # common live-key formats (motionmax husky pattern, ported to bash).
+  # Patterns:
+  #   AKIA[0-9A-Z]{16}              AWS access key id
+  #   sk_(live|test)_…              Stripe secret keys
+  #   rk_(live|test)_…              Stripe restricted keys
+  #   gh[ps]_…, gho_…, ghr_…        GitHub PATs
+  #   github_pat_…                  GitHub fine-grained PAT
+  #   eyJ…\.eyJ…\.…                 JWT (3-segment base64url)
+  #   -----BEGIN … PRIVATE KEY----- PEM blocks
+  #   xox[abprs]-…                  Slack tokens
+  #   sk-[A-Za-z0-9]{40,}           OpenAI / Anthropic-ish API keys
+  secret-scan:
+    name: Secret scan (diff regex)
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          # Need both sides of the diff for PR scans.
+          fetch-depth: 0
+
+      - name: Resolve diff range
+        id: range
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            # push to main: scan the pushed range
+            echo "base=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.after }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Scan added lines for secret patterns
+        run: |
+          BASE='${{ steps.range.outputs.base }}'
+          HEAD='${{ steps.range.outputs.head }}'
+
+          # Defensive: if base is null/zero (first push), fall back to
+          # HEAD~1 so we still scan something.
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE="$(git rev-parse "$HEAD"^ 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -1)"
+          fi
+
+          # Only look at added (+) lines so context noise doesn't false-positive.
+          added="$(git diff "$BASE".."$HEAD" -U0 --diff-filter=ACMR | grep -E '^\+[^+]' || true)"
+
+          if [ -z "$added" ]; then
+            echo "No added lines to scan."
+            exit 0
+          fi
+
+          pattern='sk_live_[A-Za-z0-9]{20,}|sk_test_[A-Za-z0-9]{20,}|rk_live_[A-Za-z0-9]{20,}|rk_test_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[ps]_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|ghr_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|sk-[A-Za-z0-9]{40,}'
+
+          hits="$(echo "$added" | grep -nE "$pattern" || true)"
+          if [ -n "$hits" ]; then
+            echo "::error::Secret-shaped string detected in PR diff."
+            echo "First matches:"
+            echo "$hits" | head -10
+            echo
+            echo "If this is a fixture/test value, scope-limit it OR move to .env.example."
+            echo "Authoritative scan (gitleaks) runs in .github/workflows/gitleaks.yml."
+            exit 1
+          fi
+
+          echo "secret-scan: clean."

@@ -1,0 +1,55 @@
+# Studio Zero — CODEOWNERS
+# ─────────────────────────────────────────────────────────────────────
+# Per sprint/owner-matrix.md discipline + Phase 9 M0 (Pipeline).
+#
+# Placeholder username (@kameleyon) — solo founder owns every path at
+# M0. As the team grows, swap in real GitHub handles per the layer-lead
+# split documented in agents/*.
+#
+# Order matters: later patterns override earlier ones. Keep the most
+# specific rules last.
+# ─────────────────────────────────────────────────────────────────────
+
+# ── Default: solo founder reviews everything not otherwise scoped ──
+*                                       @kameleyon
+
+# ── Data layer (Atlas + Shield review-required on RLS / policies) ──
+/architecture/database/policies/**      @kameleyon
+/architecture/database/migrations/**    @kameleyon
+/architecture/schemas/**                @kameleyon
+/architecture/database/**.sql           @kameleyon
+
+# ── Backend (Forge + Shield on API surface) ────────────────────────
+/apps/web/app/api/**                    @kameleyon
+/apps/web/middleware.ts                 @kameleyon
+/apps/runner/**                         @kameleyon
+/packages/runner-contract/**            @kameleyon
+
+# ── Finance (Penny + Meter + Ledger) ───────────────────────────────
+/finance/**                             @kameleyon
+/architecture/billing/**                @kameleyon
+
+# ── DevOps / CI (Pipeline owns workflows + IaC) ────────────────────
+/.github/workflows/**                   @kameleyon
+/.github/dependabot.yml                 @kameleyon
+/.husky/**                              @kameleyon
+/iac/**                                 @kameleyon
+/architecture/iac/**                    @kameleyon
+
+# ── Security (Shield + Cipher + Verify on threat model + corpora) ──
+/architecture/threat-model.md           @kameleyon
+/architecture/test-strategy.md          @kameleyon
+/runner/fixtures/**                     @kameleyon
+/compliance/**                          @kameleyon
+
+# ── Brand / Design (Pixel + Canvas + Halo) ─────────────────────────
+/brand/**                               @kameleyon
+/design/**                              @kameleyon
+
+# ── Strategy / Plans (Sprint + Axiom + BigBrain) ───────────────────
+/PRD.md                                 @kameleyon
+/BUILD_FLOW.md                          @kameleyon
+/BIGBRAIN.md                            @kameleyon
+/architecture/decisions.md              @kameleyon
+/architecture/system-diagram.md         @kameleyon
+/sprint/**                              @kameleyon

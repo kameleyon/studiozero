@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+# studio-zero commit-msg
+# ──────────────────────────────────────────────────────────────────────
+# Conventional-commits enforcement. Subject must begin with one of:
+#   feat | fix | chore | docs | refactor | test | perf | ci | build | style | revert
+# Optional scope in parentheses: feat(ci): …
+# Optional ! for breaking changes: feat(api)!: …
+#
+# Merge / revert / fixup commits are allowed through untouched.
+# Don't use --no-verify to bypass; rename the commit instead.
+# ──────────────────────────────────────────────────────────────────────
+
+set -e
+
+commit_msg_file="$1"
+subject="$(head -n1 "$commit_msg_file")"
+
+# Allow auto-generated commits through.
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*)
+    exit 0
+    ;;
+esac
+
+pattern='^(feat|fix|chore|docs|refactor|test|perf|ci|build|style|revert)(\([a-z0-9_./-]+\))?!?: .+'
+
+if ! echo "$subject" | grep -qE "$pattern"; then
+  echo "✗ commit-msg: subject does not match conventional-commits."
+  echo "  Got:      $subject"
+  echo "  Expected: <type>(<optional-scope>): <subject>"
+  echo "  Types:    feat | fix | chore | docs | refactor | test | perf | ci | build | style | revert"
+  echo "  Examples:"
+  echo "    feat(ci): add gitleaks workflow"
+  echo "    fix(score-engine): banker's rounding at SE-R06"
+  echo "    chore: bump deps"
+  exit 1
+fi

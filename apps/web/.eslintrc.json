@@ -1,0 +1,80 @@
+{
+  "//": "Studio Zero — apps/web ESLint config (Phase 9 M0, Pipeline).",
+  "//1": "Composes Next.js core-web-vitals + TypeScript + jsx-a11y (Halo accessibility gate per architecture/test-strategy.md §1) + import (predictable module ordering).",
+  "//2": "Stays on the legacy .eslintrc.json format because eslint-config-next 15.x ships flat-config support but defaults to legacy resolution; switching to flat config is a Forge ticket at M1.",
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript",
+    "plugin:jsx-a11y/recommended",
+    "plugin:import/recommended",
+    "plugin:import/typescript"
+  ],
+  "plugins": ["jsx-a11y", "import"],
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "alwaysTryTypes": true,
+        "project": "./tsconfig.json"
+      }
+    }
+  },
+  "rules": {
+    "//react-hooks": "Inherits react-hooks/exhaustive-deps from next/core-web-vitals at 'warn'; promote to 'error' once the codebase has its first real hook.",
+    "react-hooks/exhaustive-deps": "error",
+
+    "//jsx-a11y": "Halo accessibility gate. axe-core runs in CI separately; these are the static rules that block at lint time.",
+    "jsx-a11y/alt-text": "error",
+    "jsx-a11y/anchor-has-content": "error",
+    "jsx-a11y/anchor-is-valid": "error",
+    "jsx-a11y/aria-props": "error",
+    "jsx-a11y/aria-role": "error",
+    "jsx-a11y/heading-has-content": "error",
+    "jsx-a11y/label-has-associated-control": "error",
+    "jsx-a11y/no-redundant-roles": "error",
+    "jsx-a11y/role-has-required-aria-props": "error",
+
+    "//import-order": "Stable import ordering reduces merge churn + makes diff review trivial.",
+    "import/order": [
+      "error",
+      {
+        "groups": [
+          "builtin",
+          "external",
+          "internal",
+          ["parent", "sibling", "index"],
+          "type"
+        ],
+        "newlines-between": "always",
+        "alphabetize": { "order": "asc", "caseInsensitive": true }
+      }
+    ],
+    "import/no-default-export": "off",
+    "import/no-unresolved": "error"
+  },
+  "overrides": [
+    {
+      "//": "Next.js App Router conventions require default exports for pages / layouts / route handlers.",
+      "files": [
+        "app/**/page.{ts,tsx}",
+        "app/**/layout.{ts,tsx}",
+        "app/**/loading.{ts,tsx}",
+        "app/**/error.{ts,tsx}",
+        "app/**/not-found.{ts,tsx}",
+        "app/**/route.{ts,tsx}",
+        "app/**/template.{ts,tsx}",
+        "middleware.ts",
+        "next.config.{ts,js,mjs}"
+      ],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    ".next/",
+    "node_modules/",
+    "out/",
+    "next-env.d.ts",
+    "*.tsbuildinfo"
+  ]
+}

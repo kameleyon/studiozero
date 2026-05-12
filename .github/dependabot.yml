@@ -1,0 +1,114 @@
+# Dependabot configuration for studio-zero
+# ─────────────────────────────────────────────────────────────────────
+# Per sprint/milestone-M0.md (Pipeline deliverable) + test-strategy §1
+# "Security (SAST + dep CVE + secret scan)" — Dependabot is the dep-CVE
+# pillar of the M0 baseline.
+#
+# Ecosystems watched:
+#   - npm @ /             (root agent-system; node-fetch + tsx + tooling)
+#   - npm @ /apps/web     (Next.js 15 + React 19 + ESLint stack — Forge)
+#   - github-actions @ /  (keeps SHA-pinned action versions current; auto
+#                          re-resolves SHA when a new tag drops, so we
+#                          don't manually chase CVEs in actions/* every Q)
+#
+# Cadence: weekly Mondays 08:00 UTC. Security advisories bypass the
+# schedule (Dependabot fires immediately on a flagged CVE).
+#
+# Auto-merge: NOT enabled in this file (Dependabot YAML doesn't support
+# it natively). Configure via repo settings → General → "Allow auto-merge"
+# + branch protection requiring CI green; the `dependencies` label is
+# already attached for label-based gating downstream.
+# ─────────────────────────────────────────────────────────────────────
+
+version: 2
+
+updates:
+  # ── Root: agent runner + tooling ──────────────────────────────────
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '08:00'
+      timezone: 'Etc/UTC'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'npm'
+      - 'root'
+    commit-message:
+      prefix: 'deps'
+      prefix-development: 'deps-dev'
+      include: 'scope'
+    groups:
+      # Group dev-dep minor/patch — usually safe, less churn.
+      dev-deps:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+      prod-deps-patch:
+        dependency-type: 'production'
+        update-types:
+          - 'patch'
+
+  # ── apps/web: Next.js 15 + React 19 ───────────────────────────────
+  - package-ecosystem: 'npm'
+    directory: '/apps/web'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '08:00'
+      timezone: 'Etc/UTC'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'npm'
+      - 'apps-web'
+    commit-message:
+      prefix: 'deps(web)'
+      prefix-development: 'deps-dev(web)'
+      include: 'scope'
+    groups:
+      web-dev-deps:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+      web-prod-deps-patch:
+        dependency-type: 'production'
+        update-types:
+          - 'patch'
+    ignore:
+      # React + Next.js major bumps require coordinated work across
+      # the app, ESLint config, and downstream deps. Take those manually.
+      - dependency-name: 'react'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'react-dom'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'next'
+        update-types: ['version-update:semver-major']
+
+  # ── GitHub Actions: keep SHA-pinned versions current ──────────────
+  # All workflow files SHA-pin third-party actions. Dependabot for the
+  # github-actions ecosystem opens PRs that bump both the comment-trailing
+  # version AND the SHA, so we don't manually re-resolve every quarter.
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '08:00'
+      timezone: 'Etc/UTC'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'github-actions'
+    commit-message:
+      prefix: 'ci'
+      include: 'scope'
+    groups:
+      actions-minor-patch:
+        update-types:
+          - 'minor'
+          - 'patch'

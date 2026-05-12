@@ -1,0 +1,71 @@
+# studio-zero gitleaks configuration
+# ─────────────────────────────────────────────────────────────────────
+# Extends the bundled default ruleset (Stripe, AWS, GitHub PAT, Slack,
+# JWT, PEM, etc.) and adds:
+#   - global path allowlist (lockfiles, build artefacts, fixture binaries)
+#   - regex allowlist for obvious placeholders
+#   - repo-specific rules for Studio Zero (mostly placeholders until M1
+#     when keys actually land)
+#
+# Schema: https://github.com/gitleaks/gitleaks#configuration
+# ─────────────────────────────────────────────────────────────────────
+
+[extend]
+useDefault = true
+
+# ─── Global allowlist ──────────────────────────────────────────────
+[allowlist]
+description = "global allowlist — lockfiles, build output, fixture binaries, this config itself"
+paths = [
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)yarn\.lock$''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)deno\.lock$''',
+  # Next.js + framework build output.
+  '''(^|/)\.next/''',
+  '''(^|/)dist/''',
+  '''(^|/)build/''',
+  '''(^|/)coverage/''',
+  '''(^|/)playwright-report/''',
+  '''(^|/)test-results/''',
+  '''(^|/)node_modules/''',
+  '''\.min\.(js|css)$''',
+  # Documented example envs are reviewed in code review, not gitleaks;
+  # actual .env files are blocked at the husky pre-commit layer.
+  '''\.env\.example$''',
+  # This config + the husky hook contain the patterns we're detecting.
+  '''^\.gitleaks\.toml$''',
+  '''^\.husky/pre-commit$''',
+  '''^\.husky/commit-msg$''',
+  '''^\.github/workflows/ci\.yml$''',
+  # Brand/binary assets — gitleaks skips binaries but be explicit on
+  # case-sensitive remotes.
+  '''\.(png|jpg|jpeg|gif|webp|ico|pdf|mp4|mov|woff2?|ttf|otf|zip)$''',
+  # Fixture corpora at Shield/Verify (M0+) — contain intentional
+  # secret-shaped strings as test inputs.
+  '''^runner/fixtures/secret-scanner-fixtures/''',
+  '''^runner/fixtures/jwt-tampering-corpus/''',
+]
+
+regexes = [
+  # Public JWT *header* used in docs/examples (alg=none / alg=HS256).
+  '''eyJhbGciOiJub25lIn0''',
+  # Fully-x'd placeholder Stripe keys (motionmax pattern).
+  '''sk_(test|live)_x{8,}''',
+  '''sk-x{8,}''',
+  # Studio Zero schema-level placeholders (M0 fixture seeds before real keys land).
+  '''STUDIO_ZERO_PLACEHOLDER''',
+]
+
+# Historical leak commits — none yet on studio-zero. Add SHAs here when
+# a leak gets rotated, so reflagging on every CI run stops wasting
+# reviewer attention. A new secret = new SHA = flagged again.
+commits = []
+
+# ─── Repo-specific rules layered on top of defaults ────────────────
+# Placeholder section — populated at M1 when Supabase service-role JWTs,
+# Anthropic test keys, and Stripe webhook secrets first land in fixtures.
+# Default ruleset already covers each of these by shape; the M1 work
+# is narrowing those rules with project-specific keywords so reviewers
+# can mute false-positives selectively (motionmax `supabase-service-role-jwt`
+# pattern is the template).

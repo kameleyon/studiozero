@@ -1,1 +1,34 @@
-{"name":"studiozero","type":"module","scripts":{"start":"node runner.js","dependencies":{"node-fetch":"^3.3.2"}},"devDependencies":{"@types/node":"^25.6.0","node-fetch":"^3.3.2","tsx":"^4.21.0","typescript":"^6.0.3","dependencies":{"node-fetch":"^3.3.2"}},"dependencies":{"node-fetch":"^3.3.2"}}
+{
+  "name": "studio-zero",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Studio Zero — independent audit for AI-built software. Monorepo root. Phase 9 M0 test infrastructure lives here (root-level Vitest + ajv); per-app scaffolds live under apps/.",
+  "engines": {
+    "node": ">=20.18.0"
+  },
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "start": "node runner.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@vitest/coverage-v8": "^2.1.9",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}

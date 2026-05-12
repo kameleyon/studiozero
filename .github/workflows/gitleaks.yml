@@ -1,0 +1,60 @@
+name: Gitleaks
+
+# ──────────────────────────────────────────────────────────────────────
+# Authoritative secret scan — sprint/milestone-M0.md "Pipeline: CodeQL
+# + Dependabot + gitleaks v8.x with committed config".
+#
+# Triggers:
+#   - Push to main          (catches anything that slipped past PR)
+#   - Pull request          (main signal — block before merge)
+#   - Daily cron 07:00 UTC  (re-scan with updated default rules; catches
+#                            historical commits flagged by new rules)
+#
+# Configuration: .gitleaks.toml at the repo root.
+# Fast same-day rejects live in .husky/pre-commit + the inline secret-scan
+# job in ci.yml; this workflow is the thorough/authoritative scan.
+#
+# Private-repo note: gitleaks/gitleaks-action v2 needs GITLEAKS_LICENSE
+# for private repos (one-time free license from gitleaks.io). When the
+# secret is absent the action no-ops with a warning — the husky pre-commit
+# + ci.yml inline grep gate still defend the PR diff.
+# ──────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 7 * * *'
+
+concurrency:
+  group: gitleaks-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  scan:
+    name: Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout (full history for diff scans)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          # gitleaks needs full history to diff against the base commit.
+          fetch-depth: 0
+
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Required for private repos; no-op + warning if absent.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_COMMENTS: true
+          GITLEAKS_ENABLE_SUMMARY: true
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true

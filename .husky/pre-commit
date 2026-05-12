@@ -1,0 +1,67 @@
+#!/usr/bin/env sh
+# studio-zero pre-commit
+# ──────────────────────────────────────────────────────────────────────
+# Order (fast → slow):
+#   1. Block staged .env / .envrc files outright (allow .env.example).
+#   2. Inline secret-scan over staged diff. Mirrors the regex set in
+#      ci.yml (secret-scan job) so local rejects match CI rejects.
+#      Pattern coverage:
+#        Stripe sk_/rk_ live/test keys
+#        JWTs (eyJ header.payload.signature, 3-segment base64url)
+#        AWS access keys (AKIA[0-9A-Z]{16})
+#        GitHub PATs (ghp_/gho_/ghs_/ghr_/github_pat_)
+#        Slack tokens (xoxb-/xoxa-/xoxp-/xoxs-/xoxr-)
+#        PEM-format private keys
+#        OpenAI / Anthropic-shaped sk- keys (≥40 chars)
+#   3. lint-staged (typecheck + eslint --fix on staged files).
+#   4. Conventional-commits hint (informational; commit-msg enforces).
+#
+# This is the local fast-path. The thorough scan runs in CI via
+# .github/workflows/gitleaks.yml. Don't use --no-verify to bypass; if
+# the diff is intentional, mark fixture lines and re-run.
+# ──────────────────────────────────────────────────────────────────────
+
+set -e
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+if [ -n "$staged_files" ]; then
+  # ── 1. Block .env* (allow .env.example) ───────────────────────────
+  bad_env="$(echo "$staged_files" | grep -E '(^|/)\.env(\.|$)' | grep -Ev '\.example$' || true)"
+  if [ -n "$bad_env" ]; then
+    echo "✗ pre-commit: refusing to commit .env file(s):"
+    echo "$bad_env" | sed 's/^/    /'
+    echo "  Move secrets out of the staged file, then re-stage."
+    exit 1
+  fi
+
+  # ── 2. Regex scan staged content for secret-shaped strings ────────
+  # Only look at added (+) lines — context noise produces false positives.
+  diff_added="$(git diff --cached -U0 --diff-filter=ACMR -- $staged_files 2>/dev/null | grep -E '^\+[^+]' || true)"
+
+  if [ -n "$diff_added" ]; then
+    # Same pattern set as ci.yml secret-scan job. Tight enough to keep
+    # false-positive rate low.
+    pattern='sk_live_[A-Za-z0-9]{20,}|sk_test_[A-Za-z0-9]{20,}|rk_live_[A-Za-z0-9]{20,}|rk_test_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[ps]_[A-Za-z0-9]{30,}|gho_[A-Za-z0-9]{30,}|ghr_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|sk-[A-Za-z0-9]{40,}'
+
+    hits="$(echo "$diff_added" | grep -nE "$pattern" || true)"
+    if [ -n "$hits" ]; then
+      echo "✗ pre-commit: staged change contains a secret-shaped string."
+      echo "  First match(es):"
+      echo "$hits" | head -5 | sed 's/^/    /'
+      echo
+      echo "  If this is fixture/test data, move it to .env.example or a"
+      echo "  scoped fixtures/ path. The gitleaks workflow in CI will also"
+      echo "  reject it; fix it here so the PR doesn't need a rewrite."
+      exit 1
+    fi
+  fi
+fi
+
+# ── 3. lint-staged (typecheck + eslint --fix on staged files) ──────
+npx lint-staged
+
+# ── 4. Conventional-commits hint (informational) ───────────────────
+# commit-msg hook enforces this; this is a friendly reminder.
+echo "ℹ pre-commit clean. Use a conventional-commits subject:"
+echo "    feat: | fix: | chore: | docs: | refactor: | test: | perf: | ci: | build:"
