@@ -9,6 +9,13 @@
   "threat_model_ref": "architecture/threat-model.md TB-1 §S/T row + TB-3 §S row + §3 cross-cutting",
   "trust_boundary_ref": ["TB-1", "TB-3"],
   "consumer_test": "tests/security/jwt-tampering.spec.ts",
+  "additional_consumers": [
+    "tests/integration/cli-pair-expired.spec.ts",
+    "tests/integration/cli-pair-replay.spec.ts",
+    "tests/integration/cli-unpaired-rejection.spec.ts",
+    "tests/integration/cli-verdict-signature-tampered.spec.ts"
+  ],
+  "additional_consumers_note": "M3 Batch 2 (Verify) CLI integration specs exercise the same token-tampering threat model surface — bearer-token shape rejection, replay across device fingerprints, expired-token redirect-to-login, and HMAC verdict-signature mismatch. The CLI's opaque pairing tokens are NOT JWTs (server-side lookup only — see apps/web/lib/cli-auth.ts header doc), but the threat-model rows TB-1 §S/T + TB-3 §S still apply: any bearer artifact presented at a verification point must be rejected if the signature, payload, or origin is wrong. These specs are the M3 mirror of the JWT corpus at the CLI surface.",
   "notes": "Each pattern represents a JWT or JWT-like artifact presented at a verification point: the runner-token mint endpoint, the LLM gateway authorization layer, Supabase RLS via auth.runner_run_id() / auth.tenant_id(), or the admin Edge Functions. Defense layers: (1) Atlas's mint Edge Function signs with the project-level secret (HS256 over Supabase JWT secret OR ES256 over service-role private key — Cipher Fix-3); (2) auth.runner_run_id() / auth.tenant_id() helpers extract claims server-side; (3) runner_token_mints.revoked_at IS NULL join in every runner-role RLS policy (Cipher Fix-5); (4) hard 5-min TTL with refresh-on-heartbeat (ARCH-D3 + Jury B3 + Cipher Fix-3 unified); (5) iss / aud / iat / exp / jti / sub claims all validated; (6) clock skew tolerance ±30s, no more. Placeholders: sk-EXAMPLE_FAKE_* used where a key would appear; real secrets never in fixtures.",
   "patterns": [
     {

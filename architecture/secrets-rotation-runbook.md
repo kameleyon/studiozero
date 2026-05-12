@@ -174,6 +174,73 @@ So we trade a quarterly low-risk rotation for an on-incident rotation procedure 
 
 **Audit trail at delete-time:** `audit_logs` row with `action='code_cryptoshredded'` (enum value to be added in migration 0007 per Cipher Fix-3d; placeholder name pending Atlas confirmation). Metadata: `{"tenant_id_hashed": "...", "run_id_hashed": "...", "retention_days": N}`.
 
+### 1.7 CLI manifest signing Ed25519 keypair
+
+**Secret name:** CLI manifest Ed25519 private key — stored in **Jo's 1Password vault** (item: `Studio Zero — CLI manifest Ed25519 signing key (active)`); NEVER on Vercel env, NEVER on Supabase secrets, NEVER in the repo. Public key embedded in `apps/cli/src/auth/manifest-pubkey.ts` as a base64 constant + published at `https://studio-zero.com/.well-known/cli-manifest-pubkey.pub`.
+
+**Cadence:** 90 days. First rotation: M6 close (M3 ship 2026-05-12 + 90d = ~2026-08-10).
+
+**Why this cadence:** Aligns with Cipher Fix-4 platform-wide 90d policy. The Ed25519 manifest-signing key is the trust root for "is this CLI binary an approved build?" — a leaked private key allows an attacker to sign a manifest accepting their own malicious CLI's `binary_hash`, causing the server to honor verdicts from a tampered binary. Mitigation surfaces are immediate-rotate + 30d-grace window for legacy versions (`architecture/cli-manifest-signing.md` §5.2). 90d matches the rest of the calendar; the manifest is signed at most a handful of times per quarter so the operational overhead is low.
+
+**Owner of the rotation procedure:** Jo (executes the ceremony — holds the 1Password vault) + Cipher (schedules + writes the procedure) + Forge (CLI patch release).
+
+**Procedure** (architecture detail: `cli-manifest-signing.md` §5.1):
+
+1. **T-14 days:** Cipher reviews previous rotation's `audit_logs` row + confirms no compromise indicators in the trailing 90 days.
+2. **T-7 days:** Watch creates calendar reminder; Cipher pages Forge to prepare a CLI patch release.
+3. **T-0 09:00 UTC:** Jo generates a new Ed25519 keypair on the signing laptop:
+   ```bash
+   node -e "const {generateKeyPairSync} = require('crypto'); \
+     const {publicKey, privateKey} = generateKeyPairSync('ed25519'); \
+     console.log('PUBKEY:', publicKey.export({type:'spki', format:'pem'})); \
+     console.log('PRIVKEY:', privateKey.export({type:'pkcs8', format:'pem'}));"
+   ```
+4. **T-0 09:05 UTC:** Jo stores the new private key in a NEW 1Password item named `Studio Zero — CLI manifest Ed25519 signing key (active <yyyy-mm-dd>)`; renames the OLD item to `... (legacy <yyyy-mm-dd> — 30d grace)`. NEVER copy the private key off the 1Password vault.
+5. **T-0 09:10 UTC:** Forge bumps `apps/cli/package.json` minor version; updates `apps/cli/src/auth/manifest-pubkey.ts` with the new pubkey base64 constant; adds the OLD pubkey to `LEGACY_PUBKEYS`; opens a PR. Atlas mirrors the new accepted-pubkey set into the `runtime_config` row `cli_manifest_accepted_pubkeys` as part of the same change.
+6. **T-0 09:30 UTC:** Cipher reviews the PR; Verify confirms the test snapshot updates land correctly; merges.
+7. **T-0 10:00 UTC:** npm publish CI step runs `tools/cli-manifest-sign.ts` — Jo provides the private key via 1Password CLI as a one-shot env var the GitHub Actions runner sources into a temp file, signs the manifest, `shred`s the file, then uploads the signed manifest to `runtime_config` via a one-shot admin Edge Fn. The private key NEVER persists outside the runner job.
+8. **T-0 10:15 UTC:** Forge updates `apps/web/public/.well-known/cli-manifest-pubkey.pub` with the new PEM; commits + redeploys.
+9. **T-0 10:30 UTC:** Watch confirms `https://studio-zero.com/cli/manifest.json` returns the new manifest; confirms `https://studio-zero.com/.well-known/cli-manifest-pubkey.pub` returns the new PEM.
+10. **T+30d 09:00 UTC:** Forge removes the OLD pubkey from `LEGACY_PUBKEYS`; bumps CLI patch version; npm publish. Atlas mirrors the removed entry out of `cli_manifest_accepted_pubkeys`. End of grace window.
+11. **T+30d 09:05 UTC:** Jo destroys the OLD private-key 1Password item (deletes item + empties vault trash).
+12. **T+30d 09:10 UTC:** Cipher writes one `audit_logs` row:
+    ```sql
+    INSERT INTO audit_logs (tenant_id, action, actor, target, metadata)
+    VALUES (NULL, 'key_rotated', 'cipher',
+      'cli_manifest_ed25519',
+      jsonb_build_object(
+        'reason',                 'scheduled-90d',
+        'old_key_fingerprint',    '<first 12 b64 chars>',
+        'new_key_fingerprint',    '<first 12 b64 chars>',
+        'rotation_window_start',  '<ISO ts>',
+        'rotation_window_end',    '<ISO ts>',
+        'grace_window_end',       '<T+30d ISO ts>'
+      ));
+    ```
+
+**Failure mode — npm publish fails after manifest signed but before manifest uploaded:** the old manifest is still served at `/cli/manifest.json` (Atlas's `runtime_config` write is the atomic surface). Jo retries npm publish; if it fails again, page Pipeline. The old CLI keeps working with the old manifest until the new release lands. No customer impact.
+
+**Failure mode — customer running old CLI version during 30d grace:** that CLI has the OLD pubkey embedded, fetches the manifest signed by either the OLD or NEW key (server returns the manifest for THAT CLI's claimed version), verifies under the OLD pubkey (which is still in its `ACCEPTED_PUBKEYS`). Works correctly. After grace ends, the customer's `studio-zero login` / `studio-zero run` will hard-fail with the branded `Your Studio Zero CLI was modified or is out of date.` message and exit code 13 — clear signal to run `npm install -g @studiozero/cli`.
+
+**Failure mode — Jo loses access to the 1Password vault entirely (catastrophic):** the rotation procedure IS the recovery path. Cipher declares an incident, Jo generates a new keypair on a new device, Forge ships a CLI patch release without legacy pubkeys (no grace possible because the old key is unrecoverable); customers running the old CLI hit the hard-fail tamper message and must reinstall. Acceptable worst case: a 30-day window where existing-paired CLIs cannot complete a verdict POST. No data loss; the privacy invariant of the CLI is preserved (source never left the customer's machine).
+
+**Compromised-key incident path:** `architecture/cli-manifest-signing.md` §5.3 — abbreviated steps:
+
+1. Cipher pages Jo + Forge + Watch + Atlas.
+2. Jo generates new keypair in 1Password.
+3. Forge bumps CLI patch version, updates `manifest-pubkey.ts` with the NEW pubkey, **REMOVES** the compromised pubkey from `LEGACY_PUBKEYS` immediately (no grace — incident path). Cipher reviews + merges within 30 min.
+4. npm publish + manifest rebuild within 1 hour.
+5. Atlas updates `cli_manifest_accepted_pubkeys` to mirror the new state.
+6. Cipher writes `audit_logs` row with `action='key_rotated'`, `metadata->>'reason' = 'incident'`.
+7. Watch posts public incident note at `studio-zero.com/status`.
+8. Comply assesses GDPR Art. 33 + AI Act incident reporting applicability.
+
+**Verify test obligations:**
+
+- `apps/cli/tests/manifest-verify.test.ts` — happy path + signature-invalid + binary-hash-mismatch + legacy pubkey acceptance + soft-fail on fetch failure (Phase 9 M3 Batch 2 ship).
+- `tests/integration/cli-manifest-tamper.spec.ts` — server-side path: tampered binary_hash → `verifyCliClaim` returns false → `recordTamperEvent` writes audit_logs + updates cli_pairings (Phase 9 M3 Batch 2 ship).
+- Monthly drift check (Watch cron, M5+): fetches `https://studio-zero.com/cli/manifest.json` + `.well-known/cli-manifest-pubkey.pub`, verifies signature out-of-band, diffs against `runtime_config`. Any mismatch → Sentry alert.
+
 ---
 
 ## 2. AAD-fail incident response
@@ -266,6 +333,7 @@ For completeness and to prevent overreach:
 ## 5. Cross-references
 
 - `architecture/iac/secrets/key-rotation.md` — Terra's operational tempo + calendar (this runbook's companion)
+- `architecture/cli-manifest-signing.md` — the Ed25519 keypair §1.7 rotates (architecture spec)
 - `architecture/llm-gateway.md` — the gateway whose key-handling discipline this runbook enforces
 - `architecture/database/migrations/0002_rls_and_runner_jwt.sql` — Cipher Fix-1 `vault.decrypt_byok` (AAD-fail surface)
 - `architecture/threat-model.md` TB-2 / TB-4 / TB-10 / TB-12 (rotation-cadence-relevant boundaries)
