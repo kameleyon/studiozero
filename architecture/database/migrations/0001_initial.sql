@@ -61,6 +61,11 @@ CREATE TYPE audit_action AS ENUM (
 );
 CREATE TYPE tenant_role AS ENUM ('owner','admin','member');
 
+-- v0.5 Jury C3 close: in-app notification kinds. Mirrors tables.sql.
+CREATE TYPE notification_kind AS ENUM (
+  'run_complete','run_failed','payment_failed','dispute_filed','audit_assigned'
+);
+
 -- Tables --------------------------------------------------------------------
 -- The remainder of tables.sql is applied here. Maintained verbatim against
 -- ../tables.sql — when tables.sql changes for a new milestone, the diff lands
@@ -446,6 +451,28 @@ CREATE TABLE runner_token_mints (
 CREATE INDEX runner_token_mints_run_idx ON runner_token_mints(run_id);
 CREATE INDEX runner_token_mints_expires_idx ON runner_token_mints(expires_at);
 CREATE INDEX runner_token_mints_tenant_idx ON runner_token_mints(tenant_id);
+
+-- v0.5 Jury C3 close: notifications table (tenant + user scoped, RLS-bearing).
+-- Source of rows for `/app/notifications` and Realtime `notifications:<user_id>`.
+CREATE TABLE notifications (
+  id text PRIMARY KEY CHECK (id ~ '^[0-9A-HJKMNP-TV-Z]{26}$'),
+  tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind notification_kind NOT NULL,
+  subject text NOT NULL CHECK (length(subject) BETWEEN 1 AND 200),
+  body text NOT NULL CHECK (length(body) BETWEEN 1 AND 4000),
+  read_at timestamptz,
+  dismissed_at timestamptz,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX notifications_tenant_user_created_idx
+  ON notifications(tenant_id, user_id, created_at DESC);
+CREATE INDEX notifications_unread_idx
+  ON notifications(tenant_id, user_id)
+  WHERE read_at IS NULL AND dismissed_at IS NULL;
+CREATE INDEX notifications_kind_idx ON notifications(kind);
 
 -- updated_at triggers -------------------------------------------------------
 CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$

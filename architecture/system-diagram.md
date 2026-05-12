@@ -327,7 +327,7 @@ Every route in `ia/sitemap.md` mapped to the backend surface it depends on. **Fo
 | `/app/settings/integrations/cli` | `GET/DELETE /api/cli/devices` | — | — | `cli_pairings` |
 | `/app/settings/integrations/github` | `GET/DELETE /api/github/install` | — | GitHub uninstall webhook (D23) | `oauth_tokens` |
 | `/app/settings/billing/{plan,invoices,payment-method,cancel,dispute}` | `GET /api/billing/*`, `POST /api/billing/cancel` | — | Stripe webhooks | `subscriptions`, `billing_events` |
-| `/app/settings/data/retention` | `PATCH /api/settings/retention` | — | — | `tenant_settings.retention_days` |
+| `/app/settings/data/retention` | `PATCH /api/settings/retention` | — | — | `tenants.retention_days_code` |
 | `/app/settings/data/findings-export` | `GET /api/runs/export` | — | — | `findings` (RLS) |
 | `/app/billing/checkout` | (Stripe Checkout return) | — | TB-8 | — |
 | `/admin/runs/[id]` | `GET /api/admin/runs/[id]` (role=admin RLS bypass via SECURITY DEFINER fn, audit-logged) | — | — | all tables (audit-logged) |

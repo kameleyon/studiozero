@@ -1,14 +1,16 @@
 # architecture/schemas — README
 
-**Owner:** Atlas (data layer) · **Gate:** Verify Contract layer (`pnpm test schema:validate`) · **Phase:** 5 (Tech Architecture)
+**Owner:** Atlas (data layer) · **Gate:** Verify Contract layer (`pnpm test schema:validate`) · **Phase:** 5 (Tech Architecture) + Phase 9 M0 (F-MIN-1 close)
 
-Four files in this directory carry the load-bearing data contracts of Studio Zero. Treat them as **schemas-as-files, not schemas-as-prose** (BUILD_FLOW.md Phase 5 lesson learned). If a reviewer adds a field to the audit output without updating these schemas, downstream consumers silently diverge — Verify's CI gate exists to make that impossible.
+Six files in this directory carry the load-bearing data contracts of Studio Zero. Treat them as **schemas-as-files, not schemas-as-prose** (BUILD_FLOW.md Phase 5 lesson learned). If a reviewer adds a field to the audit output without updating these schemas, downstream consumers silently diverge — Verify's CI gate exists to make that impossible.
 
 | File | What it constrains | Consumed by |
 |---|---|---|
+| `audit-input.v1.schema.json` | The `POST /api/runs` intake payload (PRD §7.2 + §8 + §9.1 + §14.7). | Web app run-dispatcher, CLI control-plane, audit-input ajv validator at the API edge, `runs` seed row + `projects` upsert. |
 | `audit-output.v1.schema.json` | The terminal `final_verdict.result` payload (PRD §9.4). | Web app, score engine, share view at `/v/<short-id>`, `verdict-card` component, score_snapshots persistence, V1.5 Auto-PR body composer. |
 | `audit-event.v1.ts` | The `runner.runAudit()` event stream (PRD §13.3). | Hosted runner, CLI runner, web Realtime channel consumers, `runs.events_log` persister. |
 | `score_engine.v1.json` | Weights, thresholds, rounding mode, verdict-rule priority (PRD §10). | Score-engine implementation in the runner, score_snapshots column `score_engine_version`. |
+| `score_engine.v1.md` | Canonical mathematical runbook for the score formula + rule precedence + banker's-rounding pseudocode (PRD §10). | Forge (implements `score_v1()` from this doc), human reviewers verifying any fixture row by hand. |
 | `score_engine.v1.fixtures.json` | Canonical (findings_input → score+verdict) rows. | `pnpm test score-engine` contract-test suite (closes Verify Blocker B1). |
 
 ## Validation pattern (ajv)
@@ -94,3 +96,20 @@ Every row in `score_engine.v1.fixtures.json` includes an `expected_breakdown` bl
 - `architecture/database/tables.sql` — `score_snapshots` and `findings` table definitions that persist these payloads
 - `ia/user-flows/audit-run-state-machine.md` — `jury_synthesizing` state schema-invalid error path
 - `design/components/verdict-card/verdict-card.md` — the UI surface consuming `audit-output.v1`
+
+---
+
+## Atlas — Phase 9 M0 exit-gate self-verdict
+
+Closes `sprint/milestone-M0.md` F-MIN-1 (Atlas-owed deliverables) and Jury Phase-5 Criticals C3 + C4.
+
+- [x] **All 6 schema files in HEAD** — `audit-input.v1.schema.json`, `audit-output.v1.schema.json`, `audit-event.v1.ts`, `score_engine.v1.json`, `score_engine.v1.md`, `score_engine.v1.fixtures.json`, plus this README.
+- [x] **Jury C3 closed** — `notifications` table added to `architecture/database/tables.sql` (table 21) and mirrored into `architecture/database/migrations/0001_initial.sql`. Tenant-scoped + user-scoped + RLS-bearing. Indexes: `(tenant_id, user_id, created_at desc)` for the inbox query, partial unread index, kind index. `notification_kind` ENUM committed in both files.
+- [x] **Jury C4 closed** — `architecture/system-diagram.md` §7 route map row for `/app/settings/data/retention` now references the real column `tenants.retention_days_code` (no `tenant_settings.retention_days` string remains in the file).
+- [x] **M0 schema:validate ready** — `audit-input.v1.schema.json` is JSON Schema Draft 2020-12, `additionalProperties: false` at every level, ajv-compilable; ready for Verify's `pnpm test schema:validate` harness which Pipeline + Verify are wiring in parallel.
+
+Constraints honoured:
+- JSON Schema Draft 2020-12 strict mode — ajv-compilable.
+- `score_engine.v1.md` is the canonical mathematical reference; Forge implements `score_v1()` from it.
+- `notifications` table carries `tenant_id` + RLS hint comment; service-role-only INSERT; client SELECT/UPDATE own rows. No anon / PUBLIC access.
+- C4 corrects a doc reference to an existing column (`tenants.retention_days_code`); no new column invented.

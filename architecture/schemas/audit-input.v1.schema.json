@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://studio-zero.dev/schemas/audit-input.v1.schema.json",
+  "title": "Studio Zero Audit Input v1",
+  "description": "Stable intake contract for `POST /api/runs`. Represents the payload submitted by the web app (or CLI control plane) when a customer starts an audit run from S7→S8 of `ia/user-flows/signup-to-first-verdict.md`. Consumed by the run-dispatcher, persisted as the seed row of `runs` + the `projects` upsert, and used to compose the runner-job envelope (PRD §13.3). Strict mode (`additionalProperties: false`) at every level — silent typos here would dispatch a malformed run that fails at the runner boundary. PRD §7.2 (Step A intake, Step B depth), §8 (three execution modes), §9.1 (Surface/Code/Full SKUs), §14.7 (URL-audit authorization). State machine: `ia/user-flows/audit-run-state-machine.md` `created` state input.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tenant_id",
+    "project_id",
+    "mode",
+    "product",
+    "depth",
+    "intake_method",
+    "intake_payload",
+    "correlation_id"
+  ],
+  "properties": {
+    "tenant_id": {
+      "description": "Tenant scope. MUST match the `tenant_id` claim on the caller's session JWT — server-side check rejects mismatch with a 403 before the row is created. RLS on `runs` is the second line of defence (PRD §13.2).",
+      "type": "string",
+      "format": "uuid"
+    },
+    "project_id": {
+      "description": "The `projects` row this run targets. The project row already encodes the persistent intake (e.g., a GitHub install + repo full-name); `intake_payload` below is the per-run materialisation (e.g., the specific ref being audited).",
+      "type": "string",
+      "format": "uuid"
+    },
+    "mode": {
+      "description": "Execution mode per PRD §8. Locks which `intake_method` values are legal: byok → github_repo | deployed_url; cli → local_folder; managed → github_repo | deployed_url. Mismatches are rejected server-side.",
+      "type": "string",
+      "enum": ["byok", "cli", "managed"]
+    },
+    "product": {
+      "description": "Audit product SKU per PRD §9.1. Surface = URL-only; Code = repo-or-folder; Full = repo+URL. Surface is the only SKU that may run on the free tier (PRD §12 D2). SKU × mode × intake_method legality is enforced at the API edge.",
+      "type": "string",
+      "enum": ["surface", "code", "full"]
+    },
+    "depth": {
+      "description": "Audit depth per PRD §7.2 Step B. Surface SKU caps at `quick` or `custom`; Code and Full unlock all three. `custom` REQUIRES `customer_reviewers` to be a non-empty subset of the reviewer enum.",
+      "type": "string",
+      "enum": ["quick", "custom", "comprehensive"]
+    },
+    "intake_method": {
+      "description": "Which of the three intake shapes is being submitted. Discriminator for `intake_payload` (see allOf below). Mirrors `projects.intake_type` CHECK in tables.sql.",
+      "type": "string",
+      "enum": ["github_repo", "local_folder", "deployed_url"]
+    },
+    "intake_payload": {
+      "description": "Per-run intake materialisation. Shape switches on `intake_method` via the top-level allOf. Never carries source code — for `local_folder` the CLI ships content separately over the paired websocket (cli-pairing-and-tamper.md).",
+      "type": "object"
+    },
+    "customer_reviewers": {
+      "description": "ONLY valid when `depth == 'custom'`. Non-empty subset of the reviewer enum. Cross-checked at the API edge: presence with depth != 'custom' is a 400; absence with depth == 'custom' is a 400.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["optic", "proof", "halo", "compass", "trace", "canon"]
+      }
+    },
+    "correlation_id": {
+      "description": "Client-supplied idempotency token. Server uses this as the dedupe key when retrying the `POST /api/runs` call so a flaky client connection never produces two `runs` rows. Reusing a correlation_id within 24h returns the existing run (200 with the same `run_id`), not a new one.",
+      "type": "string",
+      "format": "uuid"
+    },
+    "client_timestamp": {
+      "description": "Optional. RFC 3339 timestamp the request was composed by the client. Server logs both this and its own arrival time; large skew (> 5 min) is logged but not rejected (clock skew is a UX problem, not a security one — JWT iat/exp owns auth-side timing).",
+      "type": "string",
+      "format": "date-time"
+    },
+    "consent_snapshot": {
+      "description": "Optional. Snapshot of cookie + AI-training consent grants at run-start (PRD §6.1, §14.5). Persisted to `runs.consent_snapshot` so a mid-run consent toggle does not retroactively change the legal basis of an in-flight run (settings-and-account-management.md EC-4).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "necessary_cookies":  { "type": "boolean" },
+        "analytics_cookies":  { "type": "boolean" },
+        "marketing_cookies":  { "type": "boolean" },
+        "ai_training":        { "type": "boolean" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "intake_method": { "const": "github_repo" } },
+        "required": ["intake_method"]
+      },
+      "then": {
+        "properties": {
+          "intake_payload": { "$ref": "#/$defs/githubIntake" },
+          "mode":           { "enum": ["byok", "managed"] }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "intake_method": { "const": "local_folder" } },
+        "required": ["intake_method"]
+      },
+      "then": {
+        "properties": {
+          "intake_payload": { "$ref": "#/$defs/localIntake" },
+          "mode":           { "const": "cli" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "intake_method": { "const": "deployed_url" } },
+        "required": ["intake_method"]
+      },
+      "then": {
+        "properties": {
+          "intake_payload": { "$ref": "#/$defs/urlIntake" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "depth": { "const": "custom" } },
+        "required": ["depth"]
+      },
+      "then": {
+        "required": ["customer_reviewers"]
+      },
+      "else": {
+        "not": { "required": ["customer_reviewers"] }
+      }
+    }
+  ],
+  "$defs": {
+    "githubIntake": {
+      "title": "GitHub repo intake",
+      "description": "Per PRD §8 GitHub-App install row; per-repo permissions only (PRD §17 D1). `installation_id` MUST belong to a row in `oauth_tokens` scoped to this tenant — server enforces.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["installation_id", "repo_full_name", "ref"],
+      "properties": {
+        "installation_id": {
+          "description": "GitHub App installation id (bigint in DB; JSON number with integer profile). Joined against `oauth_tokens.installation_id` to authorize the runner's checkout call.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "repo_full_name": {
+          "description": "`<owner>/<repo>`. Must match the installation's accessible-repos set per GitHub API; rejected at the API edge if not.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,38}/[A-Za-z0-9._-]{1,100}$",
+          "minLength": 3,
+          "maxLength": 140
+        },
+        "ref": {
+          "description": "Git ref to audit. Branch name (`main`), tag (`v1.2.3`), or full commit SHA. The runner resolves to a stable SHA at checkout and stores it on the run row for reproducibility.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "localIntake": {
+      "title": "Local-folder intake (CLI mode)",
+      "description": "The CLI ships the actual source content over the paired websocket — this payload only references the paired CLI session. Per PRD §8 + §17 D7: source never leaves the customer's machine; only findings stream back. `cli_pairing_id` MUST resolve to a `cli_pairings` row that (a) belongs to this tenant, (b) has `paired_at IS NOT NULL`, (c) has `revoked_at IS NULL`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cli_pairing_id"],
+      "properties": {
+        "cli_pairing_id": {
+          "description": "PK of the `cli_pairings` row that will execute this run. Server checks status + tenant scope before dispatch.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "folder_label": {
+          "description": "Optional. Human-readable label the user supplied for the folder (e.g., `~/code/my-app`). Persisted to runs for UI breadcrumb only — never used for filesystem access.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      }
+    },
+    "urlIntake": {
+      "title": "Deployed-URL intake",
+      "description": "Black-box audit of a deployed URL. Per PRD §14.7 (CFAA close): `attestation_signed` MUST be `true` AND `authorized_at` MUST be the moment the user ticked the attestation in the UI. Free-tier additionally enforces that the URL is the customer's own — paid SKUs may audit third-party URLs with attestation. SSRF guard at the runner: egress allowlist denies RFC 1918, loopback, link-local (D9).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "attestation_signed", "authorized_at"],
+      "properties": {
+        "url": {
+          "description": "Absolute HTTPS URL. http:// rejected. Maximum 2048 chars (industry-standard URL ceiling).",
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://",
+          "minLength": 8,
+          "maxLength": 2048
+        },
+        "attestation_signed": {
+          "description": "MUST be `true`. PRD §14.7 attestation: 'I am authorized to audit this URL.' The boolean is the wire signal; the legal force comes from the IP + timestamp logged server-side.",
+          "type": "boolean",
+          "const": true
+        },
+        "authorized_at": {
+          "description": "RFC 3339 timestamp the user ticked the attestation. Logged with IP to `audit_logs` with `action='url_audit_attestation'` for the CFAA paper trail.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "viewport_w": {
+          "description": "Optional. Headless browser viewport width in CSS px. Defaults to 1280 if absent.",
+          "type": "integer",
+          "minimum": 320,
+          "maximum": 8192
+        },
+        "viewport_h": {
+          "description": "Optional. Headless browser viewport height in CSS px. Defaults to 800 if absent.",
+          "type": "integer",
+          "minimum": 320,
+          "maximum": 8192
+        }
+      }
+    }
+  }
+}

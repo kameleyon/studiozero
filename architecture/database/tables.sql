@@ -119,6 +119,18 @@ CREATE TYPE fix_pr_state AS ENUM (
 -- is uninstalled after a run/PR. Drives the "Tracking unavailable" banner UX.
 CREATE TYPE pr_tracking_state AS ENUM ('active', 'stale', 'recovered');
 
+-- v0.5 Jury C3 close: in-app notification kinds. Forward-only; new kinds add
+-- ENUM values via ALTER TYPE in a forward migration (never re-purpose an
+-- existing value). Mirrors the route map in system-diagram.md §7 row for
+-- `/app/notifications` + Realtime channel `notifications:<user_id>`.
+CREATE TYPE notification_kind AS ENUM (
+  'run_complete',        -- terminal verdict emitted (PASS / PASS WITH FIXES / FAIL)
+  'run_failed',          -- failed_terminal or failed_synth_timeout reached
+  'payment_failed',      -- Stripe webhook flagged charge failure
+  'dispute_filed',       -- customer-opened dispute path (D20)
+  'audit_assigned'       -- V2 future: collab/seat work; reserved now to avoid re-numbering
+);
+
 CREATE TYPE audit_action AS ENUM (
   -- Append-only ledger of human / system actions for SOC2 / GDPR / DMCA.
   'url_audit_attestation',       -- §14.7 CFAA close
@@ -722,6 +734,57 @@ CREATE TABLE runner_token_mints (
 CREATE INDEX runner_token_mints_run_idx     ON runner_token_mints(run_id);
 CREATE INDEX runner_token_mints_expires_idx ON runner_token_mints(expires_at);
 CREATE INDEX runner_token_mints_tenant_idx  ON runner_token_mints(tenant_id);
+
+-- ----------------------------------------------------------------------------
+-- 21. notifications  (v0.5 Jury C3 close — in-app inbox; PRD §7.2 + system-diagram §7)
+-- ----------------------------------------------------------------------------
+-- Source of rows for `/app/notifications` route and the Realtime channel
+-- `notifications:<user_id>` (system-diagram.md §7). Tenant-scoped, user-scoped,
+-- RLS-bearing. Inserts come from service-role workers (run-complete dispatcher,
+-- Stripe webhook handler, dispute-filed action) — never from anon/PUBLIC.
+-- Customer read-path: SELECT own rows; UPDATE own rows to set read_at /
+-- dismissed_at. No DELETE from client (retention is owned by the nightly purge
+-- job per PRD §14.4).
+CREATE TABLE notifications (
+  -- ULID for time-sortable inbox ordering without a secondary sort key.
+  id           text PRIMARY KEY
+                    CHECK (id ~ '^[0-9A-HJKMNP-TV-Z]{26}$'),
+  tenant_id    uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  user_id      uuid NOT NULL REFERENCES users(id)   ON DELETE CASCADE,
+  kind         notification_kind NOT NULL,
+  subject      text NOT NULL CHECK (length(subject) BETWEEN 1 AND 200),
+  body         text NOT NULL CHECK (length(body)    BETWEEN 1 AND 4000),
+  -- Inbox state. Both timestamps are nullable; UI semantics:
+  --   read_at IS NULL      → unread badge in nav
+  --   read_at IS NOT NULL  → opened by user
+  --   dismissed_at IS NOT NULL → hidden from default inbox view (still
+  --     reachable via "Show dismissed" filter for audit-trail purposes).
+  read_at      timestamptz,                                -- nullable: unread
+  dismissed_at timestamptz,                                -- nullable: active
+  -- Free-form per-kind payload (e.g., run_id for run_complete, charge_id for
+  -- payment_failed). The UI uses this to compose deep-link CTAs ("View
+  -- verdict →"). Never stores PII beyond what's already on the user's row.
+  metadata     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  -- Notifications are read-mostly: no updated_at trigger needed beyond
+  -- read_at / dismissed_at toggles which are explicit timestamp columns.
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+-- Inbox query: list this user's notifications newest-first, optionally
+-- filtered by unread state. The composite supports both shapes.
+CREATE INDEX notifications_tenant_user_created_idx
+  ON notifications(tenant_id, user_id, created_at DESC);
+-- Unread-count badge query (covered, partial — small).
+CREATE INDEX notifications_unread_idx
+  ON notifications(tenant_id, user_id)
+  WHERE read_at IS NULL AND dismissed_at IS NULL;
+-- Kind filter for analytics / admin views.
+CREATE INDEX notifications_kind_idx ON notifications(kind);
+COMMENT ON TABLE notifications IS
+  'In-app inbox rows. Tenant-scoped + user-scoped + RLS-bearing per Atlas '
+  'rule 6. Service-role-only INSERT (workers); user can SELECT/UPDATE own '
+  'rows (read_at, dismissed_at toggles); no DELETE from client — retention '
+  'is owned by the nightly purge job (PRD §14.4). Closes Jury Phase-5 C3.';
 
 -- ----------------------------------------------------------------------------
 -- updated_at triggers (every table with updated_at gets this)
