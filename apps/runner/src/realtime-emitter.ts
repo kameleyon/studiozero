@@ -26,6 +26,14 @@
 
 // Shape mirrors architecture/schemas/audit-event.v1.ts. Kept local to
 // avoid a build-time cross-package dependency in the M1 skeleton.
+//
+// ARCH-D10 close (M3+1 carry): `cli_heartbeat` is added as a variant
+// here so both the runner-side emitter and the CLI's long-poll path
+// can publish liveness pings on the same channel/schema. Atlas owns
+// the canonical schema bump in `architecture/schemas/audit-event.v1.ts`
+// (variant + version v1 → v1.1); this file MIRRORS that contract so
+// the runner can emit conformant events even before the shared schema
+// package lands.
 export type AuditEvent =
   | { kind: "progress"; agent: string; phase: string; pct: number; at?: string }
   | { kind: "finding"; finding: Record<string, unknown>; at?: string }
@@ -46,10 +54,28 @@ export type AuditEvent =
       agent?: string;
       attempt?: number;
       at?: string;
+    }
+  | {
+      // ARCH-D10 — CLI 30s liveness signal. Emitted by `apps/cli` while a
+      // run is in-flight AND by the runner when it observes a heartbeat
+      // arriving on /api/cli/heartbeat for the run's pairing.
+      kind: "cli_heartbeat";
+      pairingId: string;
+      runId?: string;
+      cliVersion?: string;
+      healthStatus?: "healthy" | "stale" | "offline";
+      at?: string;
     };
 
 export interface RealtimeEmitter {
   emit(event: AuditEvent): void;
+  /** ARCH-D10 typed shortcut — emits a `cli_heartbeat` variant. */
+  emitHeartbeat(input: {
+    pairingId: string;
+    runId?: string;
+    cliVersion?: string;
+    healthStatus?: "healthy" | "stale" | "offline";
+  }): void;
   /** Drain any pending trailing-edge progress event. Call at run-terminal. */
   flush(): Promise<void>;
   /** Disconnect any underlying transport. Call at process shutdown. */
@@ -132,6 +158,21 @@ export function createRealtimeEmitter(
         trailing.set(agent, event);
         scheduleTrailing(agent);
       }
+    },
+    emitHeartbeat(input) {
+      // ARCH-D10 — heartbeats are NOT throttled (one per 30s already).
+      if (closed) return;
+      const event: AuditEvent = {
+        kind: "cli_heartbeat",
+        pairingId: input.pairingId,
+        ...(input.runId !== undefined ? { runId: input.runId } : {}),
+        ...(input.cliVersion !== undefined ? { cliVersion: input.cliVersion } : {}),
+        ...(input.healthStatus !== undefined
+          ? { healthStatus: input.healthStatus }
+          : {}),
+        at: new Date().toISOString(),
+      };
+      void sendDirect(event);
     },
     async flush() {
       // Drain all pending trailing-edge timers, sending the held events.

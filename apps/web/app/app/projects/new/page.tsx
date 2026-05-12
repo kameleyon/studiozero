@@ -46,6 +46,11 @@ function NewProjectInner(): React.ReactElement {
   const [urlValue, setUrlValue] = React.useState<string>(
     "https://example.com/demo",
   );
+  // CFAA shield (PRD §14.7) — URL intake REQUIRES affirmative AUP
+  // attestation. The checkbox is NOT pre-ticked; the user must
+  // explicitly opt-in BEFORE /api/runs is called.
+  const [aupAttested, setAupAttested] = React.useState<boolean>(false);
+  const [attestError, setAttestError] = React.useState<string | null>(null);
   const [depth, setDepth] = React.useState<Depth>("quick");
   const [starting, setStarting] = React.useState<boolean>(false);
 
@@ -60,7 +65,40 @@ function NewProjectInner(): React.ReactElement {
   const handleStart = async (): Promise<void> => {
     if (!intake) return;
     setStarting(true);
+    setAttestError(null);
     try {
+      // ---- CFAA shield: URL intake → AUP attestation BEFORE run start.
+      // Per PRD §14.7 + Jury M3 audit Critical #2. The attestation row
+      // MUST land in audit_logs before the run flips to state='queued'.
+      const projectId = crypto.randomUUID();
+      if (intake === "url") {
+        if (!aupAttested) {
+          setAttestError(
+            // Herald-locked error copy — what + what-to-do, grade 6.
+            "Tick the authorization box above to continue. We can only audit URLs you own or have written authorization to audit.",
+          );
+          setStarting(false);
+          return;
+        }
+        const attestRes = await fetch("/api/audit/url-attest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: urlValue, project_id: projectId }),
+        });
+        if (!attestRes.ok) {
+          const body = (await attestRes.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          setAttestError(
+            body.error === "missing_attestation"
+              ? "We couldn't record your authorization. Please tick the box and try again."
+              : "We couldn't start the audit. Try again in a moment.",
+          );
+          setStarting(false);
+          return;
+        }
+      }
+
       const res = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -68,6 +106,13 @@ function NewProjectInner(): React.ReactElement {
           intakeMethod: intake,
           depth,
           mode: intake === "local" ? "cli" : "byok",
+          projectId,
+          intakePayload:
+            intake === "url"
+              ? { url: urlValue, aup_attested: true }
+              : intake === "github"
+                ? { client_tag: clientTag || undefined }
+                : { client_tag: clientTag || undefined },
         }),
       });
       const data = (await res.json()) as { ok: boolean; redirectTo?: string };
@@ -128,16 +173,55 @@ function NewProjectInner(): React.ReactElement {
           </fieldset>
 
           {intake === "url" ? (
-            <Input
-              variant="text"
-              label="URL to audit"
-              name="audit_url"
-              autoComplete="off"
-              placeholder="https://example.com"
-              value={urlValue}
-              onChange={(e) => setUrlValue(e.target.value)}
-              helpText="Free Surface audit. Email-verified attestation: you own this URL."
-            />
+            <>
+              <Input
+                variant="text"
+                label="URL to audit"
+                name="audit_url"
+                autoComplete="off"
+                placeholder="https://example.com"
+                value={urlValue}
+                onChange={(e) => setUrlValue(e.target.value)}
+                helpText="Free Surface audit. Email-verified attestation: you own this URL."
+              />
+              {/* CFAA shield — PRD §14.7. Verbatim Herald-locked copy.
+                 NOT pre-ticked. Mandatory before submit. */}
+              <label
+                style={{
+                  display: "flex",
+                  gap: "var(--sp-12, 12px)",
+                  alignItems: "flex-start",
+                  marginTop: "var(--sp-12, 12px)",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  name="aup_attestation"
+                  required
+                  checked={aupAttested}
+                  onChange={(e) => {
+                    setAupAttested(e.target.checked);
+                    if (e.target.checked) setAttestError(null);
+                  }}
+                  aria-describedby={attestError ? "sz-aup-error" : undefined}
+                />
+                <span>
+                  I am the owner of, or have written authorization to audit,
+                  the URL above.
+                </span>
+              </label>
+              {attestError ? (
+                <p
+                  id="sz-aup-error"
+                  role="alert"
+                  className="sz-soft-warning"
+                  style={{ marginTop: "var(--sp-8, 8px)" }}
+                >
+                  {attestError}
+                </p>
+              ) : null}
+            </>
           ) : null}
 
           <details>

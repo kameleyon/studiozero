@@ -14,11 +14,14 @@
 import { readAuth, writeAuth, type AuthFile } from "./pairing-token.js";
 import { request } from "../network/studio-client.js";
 
+/** 7-day refresh boundary, exposed so the heartbeat tick + tests share it. */
+export const REFRESH_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** Decide whether refresh is needed. Threshold: 7 days before expiry. */
 export function shouldRefresh(auth: AuthFile, now: Date = new Date()): boolean {
   const exp = new Date(auth.tokenExpiresAt).getTime();
   if (Number.isNaN(exp)) return true;
-  const threshold = exp - 7 * 24 * 60 * 60 * 1000;
+  const threshold = exp - REFRESH_WINDOW_MS;
   return now.getTime() >= threshold;
 }
 
@@ -40,7 +43,7 @@ interface RefreshResponseBody {
 export async function refreshIfNeeded(
   configDir: string,
   apiUrl: string,
-  opts: { mock?: boolean; now?: Date } = {},
+  opts: { mock?: boolean; now?: Date; fetcher?: typeof fetch } = {},
 ): Promise<AuthFile | null> {
   const auth = readAuth(configDir);
   if (!auth) return null;
@@ -70,6 +73,7 @@ export async function refreshIfNeeded(
       cliVersion: auth.cliVersion,
       binaryHash: auth.binaryHash,
     },
+    ...(opts.fetcher !== undefined ? { fetcher: opts.fetcher } : {}),
   });
 
   if (!res.ok) {

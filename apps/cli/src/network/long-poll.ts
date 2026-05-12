@@ -45,6 +45,9 @@ export interface LongPollOpts {
  * is responsible for the outer loop + backoff (see `pollLoop`).
  */
 export async function pollOnce(opts: LongPollOpts): Promise<CliJob[]> {
+  // Privacy invariant — CLI long-poll is a GET; no body. The dispatched
+  // job payload carries metadata only (run-id, depth, project hint).
+  // We never echo source bytes back to the server. See PRD §13.4.
   const res = await request<LongPollResponse>({
     apiUrl: opts.apiUrl,
     method: "GET",

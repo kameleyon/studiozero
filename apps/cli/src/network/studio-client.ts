@@ -73,13 +73,18 @@ export async function request<T = unknown>(
   if (opts.body !== undefined && opts.method !== "GET") {
     bodyStr = JSON.stringify(opts.body);
     const max = opts.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
-    // M3 privacy invariant: refuse to send oversized payloads. This
-    // is a runtime guard, not a substitute for the contract test
-    // (cli-no-upload.spec.ts) — but it catches accidental regressions.
+    // Privacy invariant (PRD §13.4) — CLI NEVER uploads source. If you're
+    // adding source to this body, you're wrong. This guard refuses to
+    // send oversized payloads with a stable error code so the caller
+    // can distinguish "network is sad" from "you broke the invariant."
+    // The contract test (`tests/integration/cli-no-upload.spec.ts`) is
+    // the formal gate; this runtime check is defence in depth.
     if (Buffer.byteLength(bodyStr, "utf-8") > max) {
-      throw new Error(
-        `[studio-zero] request body exceeds ${max} bytes; refusing to send (privacy invariant)`,
+      const err = new Error(
+        `[studio-zero] EBODYTOOBIG: request body exceeds ${max} bytes; refusing to send (privacy invariant — PRD §13.4)`,
       );
+      (err as Error & { code?: string }).code = "EBODYTOOBIG";
+      throw err;
     }
     headers["Content-Type"] = "application/json";
   }

@@ -46,9 +46,68 @@ interface UploadVerdictResponse {
   signatureStatus: "verified" | "mismatch" | "unrecognized_binary";
 }
 
+/**
+ * Privacy invariant — CLI NEVER uploads source. If you're adding source
+ * to this body, you're wrong. See PRD §13.4 + §13.5 + the M3 exit gate
+ * `tests/integration/cli-no-upload.spec.ts`.
+ *
+ * The verdict body shape is the audit-output.v1 metadata-only contract:
+ *   - verdict (string), signature (hex), claimedBinaryHash (hex)
+ *   - findings (structured metadata: severity, reviewer, summary, evidence-by-reference)
+ * The `evidence` field on each finding is REFERENCE-only — file paths,
+ * line numbers, URLs, screenshot storage_paths. It MUST NOT contain
+ * raw source bytes.
+ *
+ * Defence in depth:
+ *   1. `assertMetadataOnly()` walks the finding list at runtime to refuse
+ *      any evidence shape carrying a `snippet` longer than 256 chars
+ *      (snippets are allowed for tiny context lines per audit-output.v1,
+ *      but anything beyond a single line is treated as source-leak).
+ *   2. studio-client's `maxBodyBytes` (64 KiB) is the size-cap guard.
+ *   3. `tests/integration/cli-no-upload.spec.ts` (Verify) is the contract
+ *      gate that fails CI if either guard is bypassed.
+ */
+const MAX_SNIPPET_LEN = 256;
+
+interface MaybeFinding {
+  evidence?: { type?: string; snippet?: unknown };
+}
+
+export function assertMetadataOnly(verdict: VerdictBody): void {
+  for (const f of verdict.findings as ReadonlyArray<MaybeFinding>) {
+    const ev = f.evidence;
+    if (!ev) continue;
+    const snip = ev.snippet;
+    if (snip !== undefined && snip !== null) {
+      if (typeof snip !== "string") {
+        throw new Error(
+          "[studio-zero] privacy invariant: finding.evidence.snippet must be a string",
+        );
+      }
+      if (snip.length > MAX_SNIPPET_LEN) {
+        throw new Error(
+          `[studio-zero] privacy invariant: finding.evidence.snippet exceeds ${MAX_SNIPPET_LEN} chars; refusing to upload (PRD §13.4 — source never leaves the machine)`,
+        );
+      }
+    }
+  }
+  // Dev-mode breadcrumb so a developer adding new evidence shapes sees
+  // the invariant being asserted at runtime. Production CLIs are silent.
+  if (process.env.STUDIOZERO_DEBUG_PRIVACY === "1") {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[studio-zero] privacy invariant OK: ${verdict.findings.length} findings, metadata-only`,
+    );
+  }
+}
+
 export async function uploadVerdict(
   opts: UploadVerdictOpts,
 ): Promise<UploadVerdictResult> {
+  // Privacy invariant — CLI NEVER uploads source. See PRD §13.4.
+  // If you're adding source to this body, you're wrong.
+  assertMetadataOnly(opts.verdict);
+
   const res = await request<UploadVerdictResponse>({
     apiUrl: opts.apiUrl,
     method: "POST",
@@ -85,6 +144,9 @@ export async function postRunEvent(opts: {
   event: Record<string, unknown>;
   fetcher?: typeof fetch;
 }): Promise<{ ok: boolean; status: number }> {
+  // Privacy invariant — CLI NEVER uploads source. See PRD §13.4.
+  // Event bodies are progress/reviewer-status only; no source bytes,
+  // no file contents. studio-client's 64 KiB cap is the runtime guard.
   const res = await request<{ accepted: boolean }>({
     apiUrl: opts.apiUrl,
     method: "POST",

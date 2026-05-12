@@ -76,6 +76,16 @@ export interface RunMachineDeps {
   emitter: RealtimeEmitter;
   /** Hook fired on every state transition. Tests assert on this. */
   onStateChange: (state: RunState) => void;
+  /**
+   * Populates `runs.archive_after` on transition to `verdict_emitted`
+   * (Jury M3 carry — feeds Atlas's M4 `cryptoshred_expired_run_keys`
+   * cron). Implementations should:
+   *   UPDATE runs SET archive_after = now() + (tenants.retention_days_code * '1 day'::interval)
+   *   WHERE runs.id = $runId AND runs.tenant_id = $tenantId;
+   * The runner-JWT minted at dispatch scopes this UPDATE to the run's
+   * tenant; service-role is not required.
+   */
+  setArchiveAfter?: (input: { runId: string; tenantId: string }) => Promise<void>;
   signal: AbortSignal;
 }
 
@@ -223,6 +233,38 @@ export async function runAudit(
   // ---- verdict_emitted (terminal happy) OR partial_completed ----
   const finalState: RunState = partial ? "partial_completed" : "verdict_emitted";
   deps.onStateChange(finalState);
+
+  // Jury M3 carry — populate `runs.archive_after` on every
+  // verdict_emitted transition so Atlas's M4
+  // `cryptoshred_expired_run_keys` cron has something to schedule
+  // against. Formula:
+  //   archive_after = now() + tenants.retention_days_code days
+  // Implementation lives in deps so the runtime layer can use the
+  // tenant-scoped runner-JWT; this state machine stays pure-ish.
+  // partial_completed runs also get an archive_after — they have
+  // findings to retain at the customer's chosen retention boundary.
+  if (
+    (finalState === "verdict_emitted" || finalState === "partial_completed") &&
+    deps.setArchiveAfter
+  ) {
+    try {
+      await deps.setArchiveAfter({
+        runId: input.runId,
+        tenantId: input.tenantId,
+      });
+    } catch (err) {
+      // Non-fatal — the verdict is already emitted. Log + continue.
+      // Watch's nightly reconciliation will set archive_after on any
+      // verdict_emitted row that's missing one.
+      deps.emitter.emit({
+        kind: "error",
+        recoverable: true,
+        code: "archive_after_update_failed",
+        message: (err as Error).message,
+      });
+    }
+  }
+
   await deps.emitter.flush();
 
   return {

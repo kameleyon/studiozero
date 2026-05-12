@@ -33,6 +33,7 @@ import { runLocalAudit } from "../runner/local-runner.js";
 import { createColors } from "../ui/colors.js";
 import { createProgressRenderer } from "../ui/progress.js";
 import { postRunEvent, uploadVerdict } from "../network/upload-verdict.js";
+import { startHeartbeat } from "../network/heartbeat.js";
 import { watermarkBlock } from "../watermark/private-run-self-audited.js";
 
 export interface RunCmdOpts {
@@ -108,6 +109,21 @@ export async function runCommand(
   process.once("SIGINT", handleSignal);
   process.once("SIGTERM", handleSignal);
 
+  // ARCH-D10 / Jury M3 Major #4 — 30s heartbeat while the run is
+  // in-flight. The handle is cancellable via the same AbortController
+  // we use for SIGINT, so Ctrl-C tears down both the audit AND the
+  // heartbeat cleanly. Skip in tests (skipUpload === true) so unit
+  // tests don't accumulate timers.
+  const heartbeat = !opts.skipUpload
+    ? startHeartbeat({
+        apiUrl: env.apiUrl,
+        configDir: env.configDir,
+        token: auth.token,
+        signal: controller.signal,
+        ...(opts.fetcher !== undefined ? { fetcher: opts.fetcher } : {}),
+      })
+    : null;
+
   const progress = createProgressRenderer();
   const reviewers =
     depth === "quick"
@@ -136,6 +152,10 @@ export async function runCommand(
     process.removeListener("SIGINT", handleSignal);
     process.removeListener("SIGTERM", handleSignal);
     progress.end();
+    // Tear down the heartbeat as soon as the audit finishes (happy
+    // path OR abort). The server-side "stale" derivation will flip
+    // the row 5min after the last heartbeat lands.
+    if (heartbeat) heartbeat.stop();
   }
 
   for (const r of result.reviewerResults) {
