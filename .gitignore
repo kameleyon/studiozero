@@ -29,6 +29,12 @@ apps/runner/node_modules/
 apps/runner/coverage/
 apps/runner/*.tsbuildinfo
 
+# apps/cli — Node TS binary build outputs (M3 Batch 1)
+apps/cli/dist/
+apps/cli/node_modules/
+apps/cli/coverage/
+apps/cli/*.tsbuildinfo
+
 # OS / IDE
 .DS_Store
 Thumbs.db

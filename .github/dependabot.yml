@@ -201,6 +201,47 @@ updates:
       - dependency-name: "pg-boss"
         update-types: ["version-update:semver-major"]
 
+  # ── apps/cli: customer-machine CLI binary (M3 Batch 1) ────────────
+  - package-ecosystem: "npm"
+    directory: "/apps/cli"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "npm"
+      - "apps-cli"
+    commit-message:
+      prefix: "deps(cli)"
+      prefix-development: "deps-dev(cli)"
+      include: "scope"
+    groups:
+      types:
+        patterns:
+          - "@types/*"
+        update-types:
+          - "minor"
+          - "patch"
+      vitest:
+        patterns:
+          - "@vitest/*"
+          - "vitest"
+        update-types:
+          - "minor"
+          - "patch"
+      cli-dev-deps:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      cli-prod-deps-patch:
+        dependency-type: "production"
+        update-types:
+          - "patch"
+
   # ── GitHub Actions: keep SHA-pinned versions current ──────────────
   # All workflow files SHA-pin third-party actions. Dependabot for the
   # github-actions ecosystem opens PRs that bump both the comment-trailing

@@ -25,6 +25,10 @@
 # /apps/runner/** — Forge owns runner code; Shield co-reviews sandbox-
 # adjacent paths (egress, JWT refresh). M1 Batch 3 explicit assignment.
 /apps/runner/**                         @kameleyon
+# /apps/cli/** — Forge owns the CLI binary (M3); Shield co-reviews
+# pairing-token storage + D7 verdict-signing paths; Herald co-reviews
+# the locked watermark copy. M3 Batch 1 explicit assignment.
+/apps/cli/**                            @kameleyon
 /packages/runner-contract/**            @kameleyon
 # Supabase Edge Functions — Forge implements, Shield reviews secrets
 # handling (mint-runner-token, llm-gateway, byok-validate).
