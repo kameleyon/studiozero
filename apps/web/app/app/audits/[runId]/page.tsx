@@ -3,17 +3,18 @@
 /**
  * /app/audits/[runId] — Trace flow S8 + S9.
  *
- * Polls /api/runs/[runId] every 500ms. State machine advances through:
- *   queued → dispatched → reviewers_running → all_reviewers_complete →
- *   jury_synthesizing → verdict_emitted (~10 seconds total)
+ * Phase 9 M1 Batch 2 (Vega) — swaps the M1 starter's 500ms polling loop
+ * for `useRunRealtime(runId)` which subscribes to Supabase Realtime
+ * `runs:<runId>` (postgres_changes on runs + findings). The hook falls
+ * back to polling the mock /api/runs route when env vars are absent —
+ * so the audit page renders with one shape regardless of mode.
+ *
+ * Cleanup contract: the hook tears down its subscription / interval on
+ * component unmount and on `runId` change (see `lib/run-realtime.ts`).
  *
  * Renders one of:
- *   - in-progress view (Trace S8): LiveProgressRegion + per-reviewer rows
- *   - terminal view   (Trace S9): VerdictCard + ScoreDisplay + FindingsRow*
- *
- * State names mirror PRD's run_state ENUM — do not invent new ones.
- *
- * Cancel: stub (M1+1 wires real SIGTERM signaling to runner).
+ *   - in-progress view (Trace S8): LiveProgressRegion + reviewer rows
+ *   - terminal view (Trace S9):    VerdictCard + ScoreDisplay + Findings
  */
 import * as React from "react";
 import { use } from "react";
@@ -24,24 +25,17 @@ import { FindingsRow } from "../../../../components/FindingsRow";
 import { LiveProgressRegion } from "../../../../components/LiveProgressRegion";
 import { ScoreDisplay } from "../../../../components/ScoreDisplay";
 import { VerdictCard } from "../../../../components/VerdictCard";
+import { useRunRealtime, type RunSnapshot } from "../../../../lib/run-realtime";
 
-import type { MockFinding, MockScoreBreakdown } from "../../../../lib/mock-data";
-import type { RunState, ReviewerProgress, Verdict } from "../../../../lib/types";
-
-interface RunPoll {
-  state: RunState;
-  progress: number;
-  elapsedMs: number;
-  reviewers: ReviewerProgress[];
-  verdict: {
-    verdict: Verdict;
-    score: MockScoreBreakdown;
-    findings: MockFinding[];
-  } | null;
-}
+import type { MockFinding } from "../../../../lib/mock-data";
+import type {
+  ReviewerProgress,
+  RunState,
+} from "../../../../lib/types";
 
 function stateLabel(s: RunState): string {
   switch (s) {
+    case "created":
     case "queued":
       return "Run queued — waiting for a worker.";
     case "dispatched":
@@ -54,6 +48,14 @@ function stateLabel(s: RunState): string {
       return "Jury is composing your verdict — this takes about 10 seconds.";
     case "verdict_emitted":
       return "Audit complete.";
+    case "archived":
+      return "Audit complete (archived).";
+    case "cancelled":
+      return "Audit cancelled.";
+    case "partial_completed":
+      return "Audit ended with partial results.";
+    case "failed_terminal":
+      return "Audit failed.";
     default:
       return s;
   }
@@ -80,80 +82,66 @@ export default function AuditRunPage({
   params: Promise<{ runId: string }>;
 }): React.ReactElement {
   const { runId } = use(params);
-  const [poll, setPoll] = React.useState<RunPoll | null>(null);
+  const snap = useRunRealtime(runId);
 
-  React.useEffect(() => {
-    let alive = true;
-    const tick = async (): Promise<void> => {
-      try {
-        const res = await fetch(`/api/runs/${runId}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const data = (await res.json()) as RunPoll & { mock?: boolean };
-        if (alive) setPoll(data);
-      } catch {
-        // swallow — next tick retries
-      }
-    };
-    void tick();
-    const interval = setInterval(() => void tick(), 500);
-    return () => {
-      alive = false;
-      clearInterval(interval);
-    };
-  }, [runId]);
-
-  if (!poll) {
+  if (!snap) {
     return (
       <>
-        <p className="sz-demo-banner">
-          <strong>Demo mode.</strong> Loading mock run…
-        </p>
-        <Chip variant="mono-meta" tone="neutral">RUN · {runId.toUpperCase()}</Chip>
+        <Chip variant="mono-meta" tone="neutral">
+          RUN · {runId.toUpperCase()}
+        </Chip>
         <h1 id="page-h1">Run starting…</h1>
-        <p>Connecting to the mock state machine.</p>
+        <p>Connecting to the run channel.</p>
       </>
     );
   }
 
   // Terminal — verdict emitted.
-  if (poll.state === "verdict_emitted" && poll.verdict) {
-    return <VerdictScreen runId={runId} poll={poll} />;
+  if (
+    (snap.state === "verdict_emitted" || snap.state === "archived") &&
+    snap.verdict
+  ) {
+    return <VerdictScreen runId={runId} snap={snap} />;
   }
 
   // In-progress.
   return (
     <>
-      <p className="sz-demo-banner">
-        <strong>Demo mode.</strong> Mock run advances over ~10 seconds. Real
-        audits take 10–15 min (Quick) or 20–45 min (Comprehensive).
-      </p>
+      {snap.mock ? (
+        <p className="sz-demo-banner">
+          <strong>Demo mode.</strong> Mock run advances over ~10 seconds. Real
+          audits take 10–15 min (Quick) or 20–45 min (Comprehensive).
+        </p>
+      ) : null}
       <Chip variant="mono-meta" tone="neutral">
-        RUN · {runId.toUpperCase()} · STATE: {poll.state.toUpperCase()}
+        RUN · {runId.toUpperCase()} · STATE: {snap.state.toUpperCase()}
       </Chip>
-      <h1 id="page-h1">{stateLabel(poll.state)}</h1>
+      <h1 id="page-h1">{stateLabel(snap.state)}</h1>
       <p className="body-lg">
-        Progress: {Math.round(poll.progress * 100)}% · Elapsed:{" "}
-        {Math.round(poll.elapsedMs / 1000)}s
+        Progress: {Math.round(snap.progress * 100)}% · Elapsed:{" "}
+        {Math.round(snap.elapsedMs / 1000)}s
       </p>
 
       <div className="sz-progress-bar" aria-hidden="true">
         <div
           className="sz-progress-bar__fill"
-          style={{ width: `${Math.round(poll.progress * 100)}%` }}
+          style={{ width: `${Math.round(snap.progress * 100)}%` }}
         />
       </div>
 
       <h2>Reviewers</h2>
       <LiveProgressRegion
         latestAnnouncement={(() => {
-          const running = poll.reviewers.find((r) => r.status === "running");
+          const running = snap.reviewers.find(
+            (r) => r.status === "running",
+          );
           if (running) {
             return `${running.reviewer} is ${phaseLabel(running.phase).toLowerCase()}.`;
           }
-          return stateLabel(poll.state);
+          return stateLabel(snap.state);
         })()}
       >
-        {poll.reviewers.map((r) => (
+        {snap.reviewers.map((r) => (
           <div
             key={r.reviewer}
             className="sz-progress-row"
@@ -176,12 +164,10 @@ export default function AuditRunPage({
           variant="ghost"
           size="md"
           onClick={() => {
-            // M1+1: send SIGTERM to runner, transition state to cancelled.
-            // For mock: redirect home.
             if (
               typeof window !== "undefined" &&
               window.confirm(
-                "Cancel this run? Findings so far will be lost in the demo. (Real M1+1 preserves partial findings.)",
+                "Cancel this run? Findings so far will be preserved.",
               )
             ) {
               window.location.href = "/app";
@@ -197,29 +183,28 @@ export default function AuditRunPage({
 
 function VerdictScreen({
   runId,
-  poll,
+  snap,
 }: {
   runId: string;
-  poll: RunPoll;
+  snap: RunSnapshot;
 }): React.ReactElement {
-  const verdict = poll.verdict;
+  const verdict = snap.verdict;
   if (!verdict) {
     return <p>Verdict not available.</p>;
   }
   const isFail = verdict.verdict === "FAIL";
   const totalFindings = verdict.findings.length;
 
-  // Group findings by category (Compass AH-2 default).
-  const groups = verdict.findings.reduce<
-    Record<string, MockFinding[]>
-  >((acc, f) => {
-    if (!acc[f.category]) acc[f.category] = [];
-    const arr = acc[f.category];
-    if (arr) arr.push(f);
-    return acc;
-  }, {});
+  const groups = verdict.findings.reduce<Record<string, MockFinding[]>>(
+    (acc, f) => {
+      if (!acc[f.category]) acc[f.category] = [];
+      const arr = acc[f.category];
+      if (arr) arr.push(f);
+      return acc;
+    },
+    {},
+  );
 
-  // Severity counts for the locked line.
   const sevCounts = verdict.findings.reduce<Record<string, number>>(
     (acc, f) => {
       acc[f.severity] = (acc[f.severity] ?? 0) + 1;
@@ -228,10 +213,8 @@ function VerdictScreen({
     {},
   );
 
-  // Locked body paragraphs per Herald sample 03.
   const bodyParagraphs = isFail
     ? [
-        // Locked first sentence pattern: "We found N issues across…"
         `We found ${totalFindings} issues across UX, accessibility, and brand consistency. Here's every one, with the evidence.`,
         "Most first audits do not pass our gate — that's the design. Every finding below names a file, a line, and a fix.",
       ]
@@ -242,10 +225,12 @@ function VerdictScreen({
 
   return (
     <>
-      <p className="sz-demo-banner">
-        <strong>Demo verdict.</strong> Findings are mock fixtures with paths
-        like <code>src/Mock*</code>.
-      </p>
+      {snap.mock ? (
+        <p className="sz-demo-banner">
+          <strong>Demo verdict.</strong> Findings are mock fixtures with paths
+          like <code>src/Mock*</code>.
+        </p>
+      ) : null}
       <VerdictCard
         verdict={verdict.verdict}
         score={verdict.score.total}
@@ -272,7 +257,11 @@ function VerdictScreen({
           )
         }
         secondaryCta={
-          <Button variant="ghost" size="md" href={`/app/audits/${runId}/export`}>
+          <Button
+            variant="ghost"
+            size="md"
+            href={`/app/audits/${runId}/export`}
+          >
             Export report
           </Button>
         }
@@ -294,7 +283,10 @@ function VerdictScreen({
         />
       </section>
 
-      <section aria-labelledby="findings-h2" className="sz-findings-section">
+      <section
+        aria-labelledby="findings-h2"
+        className="sz-findings-section"
+      >
         <h2 id="findings-h2">Findings</h2>
         <p className="findings-intro">
           {totalFindings} findings, grouped by category. Expand any row for

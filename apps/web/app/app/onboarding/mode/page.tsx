@@ -14,16 +14,34 @@ import * as React from "react";
 import { Button } from "../../../../components/Button";
 import { Card } from "../../../../components/Card";
 import { Chip } from "../../../../components/Chip";
+import { isMockMode } from "../../../../lib/env";
+import { createBrowserSupabaseClient } from "../../../../lib/supabase-client";
 
 type Mode = "byok" | "cli" | "managed";
 
 export default function ModePickerPage(): React.ReactElement {
   const router = useRouter();
   const [selected, setSelected] = React.useState<Mode | null>(null);
+  const [saving, setSaving] = React.useState<boolean>(false);
 
-  const handleContinue = (): void => {
+  const handleContinue = async (): Promise<void> => {
+    if (!selected) return;
+    setSaving(true);
+    // Persist mode_pref to user_metadata so the rest of the app reads
+    // a consistent value (the AppShell mode chip + layout key off it).
+    if (!isMockMode()) {
+      try {
+        const supabase = createBrowserSupabaseClient();
+        await supabase.auth.updateUser({
+          data: { mode_pref: selected },
+        });
+      } catch {
+        // Non-fatal — the user can still proceed; mode_pref is a hint.
+      }
+    }
     if (selected === "byok") router.push("/app/onboarding/byok");
-    else if (selected === "cli") router.push("/app/settings/integrations/cli");
+    else if (selected === "cli")
+      router.push("/app/settings/integrations/cli");
     else if (selected === "managed") router.push("/app/projects/new");
   };
 
@@ -85,12 +103,13 @@ export default function ModePickerPage(): React.ReactElement {
         <Button
           variant="primary"
           size="lg"
-          onClick={handleContinue}
+          onClick={() => void handleContinue()}
           disabled={!selected}
           aria-disabled={!selected}
+          loading={saving}
           arrow
         >
-          Save and continue
+          {saving ? "Saving" : "Save and continue"}
         </Button>
       </div>
     </>

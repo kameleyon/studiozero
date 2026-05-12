@@ -3,8 +3,10 @@
 /**
  * /app/settings/integrations/byok — BYOK key rotation (Scenario 3).
  *
- * Same Halo HC5 contract as /app/onboarding/byok. Adds a "Saved." toast
- * after the mock dry-run succeeds, per sample 02 §4.
+ * Phase 9 M1 Batch 2 (Vega) — same Edge Function as the onboarding form,
+ * just with a "Saved." toast on success and no redirect. Mock fallback
+ * preserved: when `lib/env.ts isMockMode()` is true, we accept any
+ * `sk-ant-*` key offline.
  */
 import * as React from "react";
 
@@ -13,8 +15,15 @@ import { Card } from "../../../../../components/Card";
 import { Chip } from "../../../../../components/Chip";
 import { Form } from "../../../../../components/Form";
 import { Input } from "../../../../../components/Input";
+import { useSupabaseUser } from "../../../../../lib/auth-context";
+import { getFunctionsBaseUrl, isMockMode } from "../../../../../lib/env";
+import { createBrowserSupabaseClient } from "../../../../../lib/supabase-client";
+
+const ERR_REJECTED =
+  "Anthropic didn't accept that key. Check it and paste again.";
 
 export default function ByokSettingsPage(): React.ReactElement {
+  const { user, mock } = useSupabaseUser();
   const [key, setKey] = React.useState<string>("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState<boolean>(false);
@@ -25,23 +34,74 @@ export default function ByokSettingsPage(): React.ReactElement {
     setError(null);
     setSaved(false);
     if (!key.startsWith("sk-ant-")) {
-      setError("Anthropic didn't accept that key. Check it and paste again.");
+      setError(ERR_REJECTED);
       return;
     }
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 700));
-    setSubmitting(false);
-    setSaved(true);
-    setKey("");
-    setTimeout(() => setSaved(false), 3000);
+
+    if (isMockMode()) {
+      await new Promise((r) => setTimeout(r, 700));
+      setSubmitting(false);
+      setSaved(true);
+      setKey("");
+      setTimeout(() => setSaved(false), 3000);
+      return;
+    }
+
+    const base = getFunctionsBaseUrl();
+    if (!base) {
+      setError(ERR_REJECTED);
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setError("Your session expired. Sign in again to rotate your key.");
+        setSubmitting(false);
+        return;
+      }
+      const res = await fetch(`${base}/byok-validate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ key }),
+      });
+      if (res.status !== 200) {
+        setError(ERR_REJECTED);
+        setSubmitting(false);
+        return;
+      }
+      setSubmitting(false);
+      setSaved(true);
+      setKey("");
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setError(ERR_REJECTED);
+      setSubmitting(false);
+    }
   };
+
+  const currentFp = user?.byokKeyFingerprint ?? null;
+  const currentBody = currentFp
+    ? `${currentFp} · Validated.`
+    : "No key on file yet.";
 
   return (
     <>
-      <p className="sz-demo-banner">
-        <strong>Demo mode.</strong> Key never leaves the browser; mock dry-run
-        accepts any string beginning with <code>sk-ant-</code>.
-      </p>
+      {mock ? (
+        <p className="sz-demo-banner">
+          <strong>Demo mode.</strong> Key never leaves the browser; mock
+          dry-run accepts any string beginning with <code>sk-ant-</code>.
+        </p>
+      ) : null}
       <Chip variant="mono-meta" tone="neutral">INTEGRATIONS · BYOK</Chip>
       <h1 id="page-h1">Anthropic API key (BYOK)</h1>
       <p className="body-lg">
@@ -52,8 +112,10 @@ export default function ByokSettingsPage(): React.ReactElement {
       <Card
         variant="default"
         heading="Current key"
-        body="sk-ant-...DEMO · Validated 3 days ago (mock)."
-        mono="STATUS: VALIDATED · LAST USED 11M AGO"
+        body={currentBody}
+        mono={
+          user?.byokVerified ? "STATUS: VALIDATED" : "STATUS: NOT VALIDATED"
+        }
       />
 
       <h2>Rotate the key</h2>
@@ -69,7 +131,15 @@ export default function ByokSettingsPage(): React.ReactElement {
           helpText="Pasting replaces the existing key after a successful dry-run."
         />
         {saved ? (
-          <p style={{ color: "var(--verdict-pass)", fontFamily: "var(--font-mono)", fontSize: "var(--fs-mono-data)" }}>
+          <p
+            style={{
+              color: "var(--verdict-pass)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "var(--fs-mono-data)",
+            }}
+            role="status"
+            aria-live="polite"
+          >
             Saved.
           </p>
         ) : null}

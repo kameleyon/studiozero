@@ -34,6 +34,46 @@ If Vercel doesn't auto-detect the monorepo root, set
 **Project Settings → Root Directory → `apps/web`** in the dashboard
 (one-time config; vercel.json overrides this anyway).
 
+## Dev modes — with Supabase vs offline mock
+
+Studio Zero's web app boots in **one of two modes**. Selection is decided
+by `lib/env.ts`:
+
+| Mode | Trigger                                                                                                | Surfaces                                                             |
+| ---- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Real | `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` set AND `NEXT_PUBLIC_USE_AUTH_MOCK!=true` | Real Supabase Auth, Realtime, BYOK Edge Function, RLS-scoped queries |
+| Mock | Either env var missing OR `NEXT_PUBLIC_USE_AUTH_MOCK=true`                                             | Mock user, fixture projects, wall-clock state machine                |
+
+The mock fallback exists so a contributor with no Supabase project still
+gets a clickable demo (`npm run dev` works without any `.env.local`).
+**Production builds without Supabase env vars print a startup warning**
+(see `assertProductionWiringPresent()` in `lib/env.ts`) — set the vars
+in Vercel Project Settings before launch.
+
+### With-Supabase setup (real path)
+
+```sh
+cp .env.example .env.local        # M1+1: ship this once Forge-1 lands
+# Edit .env.local — set:
+#   NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+#   SUPABASE_SERVICE_ROLE_KEY=eyJ...     # server-side only
+#   NEXT_PUBLIC_GITHUB_APP_SLUG=<your-app-slug>
+npm run dev
+```
+
+### Offline-mock setup (CI / first-time)
+
+```sh
+# No .env.local needed. Run:
+npm run dev
+# /signup → mock cookie set → /app renders MOCK_PROJECTS
+# /app/audits/run-demo-1 → wall-clock state machine → FAIL verdict
+```
+
+The header chip shows `· DEMO DATA` in mock mode so alpha users can tell
+real audits from fixtures (Compass AH-1 + M1 obvious-mock contract).
+
 ## AI Act Art. 50 interim disclosure (PRD §11.3)
 
 Two surfaces — both wired:
@@ -60,15 +100,15 @@ become stale and get deleted in favour of the package import.
 
 ## Routes
 
-| Route               | Status at M0 | Owner           | Ships at         |
-| ------------------- | ------------ | --------------- | ---------------- |
-| `/`                 | Live         | Forge + Pixel   | M0 (this scaffold)|
-| `/api/health`       | Live         | Forge           | M0               |
-| `/accessibility`    | Stub         | Halo + Comply   | M4 (full text)   |
-| `/privacy`          | Stub         | Comply          | M4               |
-| `/terms`            | Stub         | Comply          | M4               |
-| `/aup`              | Stub         | Comply          | M4               |
-| `/subprocessors`    | Stub         | Comply          | M2               |
+| Route            | Status at M0 | Owner         | Ships at           |
+| ---------------- | ------------ | ------------- | ------------------ |
+| `/`              | Live         | Forge + Pixel | M0 (this scaffold) |
+| `/api/health`    | Live         | Forge         | M0                 |
+| `/accessibility` | Stub         | Halo + Comply | M4 (full text)     |
+| `/privacy`       | Stub         | Comply        | M4                 |
+| `/terms`         | Stub         | Comply        | M4                 |
+| `/aup`           | Stub         | Comply        | M4                 |
+| `/subprocessors` | Stub         | Comply        | M2                 |
 
 All routes 200 OK at M0 — no 404s for surfaces the landing links to,
 per BUILD_FLOW Hard Rule §5 (production-ready from day one).

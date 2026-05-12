@@ -19,6 +19,7 @@ import { usePathname } from "next/navigation";
 import * as React from "react";
 
 import { Sidebar } from "./Sidebar";
+import { useSupabaseUser } from "../lib/auth-context";
 
 const SIDEBAR_ITEMS = [
   { href: "/app", label: "Dashboard", icon: "home" as const },
@@ -38,6 +39,12 @@ export function AppShell({
   children,
 }: AppShellProps): React.ReactElement {
   const pathname = usePathname() ?? "/app";
+  const { user } = useSupabaseUser();
+  // First-letter avatar from displayName or email — fallback "?" if no user.
+  const avatarLetter =
+    user?.displayName?.[0]?.toUpperCase() ??
+    user?.email?.[0]?.toUpperCase() ??
+    "?";
 
   return (
     <div className="sz-app-shell">
@@ -71,8 +78,18 @@ export function AppShell({
                 />
               </svg>
             </a>
-            <a href="/app/settings" className="sz-app-header__user">
-              <span className="sz-app-header__avatar" aria-hidden="true">D</span>
+            <a
+              href="/app/settings"
+              className="sz-app-header__user"
+              aria-label={
+                user
+                  ? `User menu for ${user.displayName}`
+                  : "User menu"
+              }
+            >
+              <span className="sz-app-header__avatar" aria-hidden="true">
+                {avatarLetter}
+              </span>
               <span className="sz-sr-only">User menu</span>
             </a>
           </div>

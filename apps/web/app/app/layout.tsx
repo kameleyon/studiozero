@@ -1,35 +1,51 @@
+"use client";
+
 import * as React from "react";
 
 import { AppShell } from "../../components/AppShell";
 import { Chip } from "../../components/Chip";
+import { useSupabaseUser } from "../../lib/auth-context";
 
 /**
  * /app/* layout — wraps every authed route with the AppShell (header +
- * Sidebar + main). The shell is a client component (Sidebar uses
- * `usePathname()`), so this layout is a simple pass-through.
+ * Sidebar + main).
  *
- * Mode chip in the header carries the locked mock copy:
- *   "MODE: BYOK · KEY VALIDATED · NO RUNS YET"
+ * The mode chip used to carry a locked mock string. Phase 9 M1 Batch 2
+ * (Vega) wires it to the live user shape from `useSupabaseUser()`:
  *
- * Real M1+1 wiring derives the chip from the authed user's tenant state.
+ *   modePref === "byok"      → "MODE: BYOK · KEY VALIDATED" (or "PENDING")
+ *   modePref === "cli"       → "MODE: CLI"
+ *   modePref === "managed"   → "MODE: MANAGED"
+ *   modePref absent          → "MODE: NOT SET"
+ *
+ * When `mock===true` the chip suffix says `· DEMO DATA` so alpha users
+ * can always tell mock from real (Compass AH-1 + the M1 starter's
+ * obvious-mock contract).
  */
-export const metadata = {
-  title: {
-    template: "%s — Studio Zero",
-    default: "Studio Zero — app",
-  },
-};
-
 export default function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }): React.ReactElement {
+  const { user, mock } = useSupabaseUser();
+
+  let label = "MODE: NOT SET";
+  if (user?.modePref === "byok") {
+    label = user.byokVerified
+      ? "MODE: BYOK · KEY VALIDATED"
+      : "MODE: BYOK · KEY PENDING";
+  } else if (user?.modePref === "cli") {
+    label = "MODE: CLI";
+  } else if (user?.modePref === "managed") {
+    label = "MODE: MANAGED";
+  }
+  if (mock) label = `${label} · DEMO DATA`;
+
   return (
     <AppShell
       modeChip={
         <Chip variant="mono-meta" tone="neutral">
-          MODE: BYOK · KEY VALIDATED · DEMO DATA
+          {label}
         </Chip>
       }
     >

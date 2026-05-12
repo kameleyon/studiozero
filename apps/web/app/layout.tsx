@@ -4,10 +4,16 @@ import {
   AI_DISCLOSURE_META_CONTENT,
   AI_DISCLOSURE_META_NAME,
 } from "../lib/ai-disclosure";
+import { AuthProvider } from "../lib/auth-context";
+import { assertProductionWiringPresent } from "../lib/env";
 
 import type { Metadata, Viewport } from "next";
 
 import "./globals.css";
+
+// One-shot startup guard — warns (does not throw) when a production build
+// is missing Supabase env vars. See `lib/env.ts` for the policy.
+assertProductionWiringPresent();
 
 /**
  * Studio Zero — root layout.
@@ -93,7 +99,9 @@ export default function RootLayout({
 }): React.ReactElement {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }
