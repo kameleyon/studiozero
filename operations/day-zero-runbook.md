@@ -267,4 +267,112 @@ At 23:30 UTC on T-0:
 
 ---
 
+## 9. Final pre-flight checklist (Vega + Forge — M5 close)
+
+Run this checklist at T-1 evening AND immediately before the 06:00 UTC production deploy on T-0. Every box must be green; any FAIL halts launch per `BIGBRAIN.md` Hard Rule §1.
+
+### 9.1 Regression — final green build
+
+| #   | Check                             | Command / source                           | Pass criterion                                                         | Owner    |
+| --- | --------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------- | -------- |
+| F1  | Root-level regression suite green | `pnpm test` from repo root (or `npm test`) | All vitest specs PASS, zero skipped without justification              | Pipeline |
+| F2  | Web build green                   | `cd apps/web && npm run build`             | `next build` exits 0, no warnings beyond expected metadata-base notice | Forge    |
+| F3  | Web typecheck green               | `cd apps/web && npm run typecheck`         | `tsc --noEmit` exits 0                                                 | Forge    |
+| F4  | Web lint green                    | `cd apps/web && npm run lint`              | `next lint` exits 0, no error-level rules                              | Forge    |
+| F5  | Schema validation suite green     | `pnpm test -- schema-validate.test.ts`     | All AJV schemas validate against the seed corpus                       | Atlas    |
+
+### 9.2 Accessibility — final WCAG axe scan
+
+| #   | Check                                                                                      | Command / source                                                                                                                     | Pass criterion                                                              | Owner |
+| --- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ----- |
+| A1  | Axe-core gate green on all 12 primary-flow pages × 2 viewports (mobile-320 + desktop-1280) | `cd apps/web && npm run test:a11y`                                                                                                   | Zero Critical / Serious violations on every page-viewport combo             | Halo  |
+| A2  | New M5 routes covered by the axe gate                                                      | Verify `tests/e2e/a11y-primary-flows.spec.ts` includes `/audit`, `/build`, `/modes`, `/blog`, `/blog/why-audit`, `/pricing`, `/dmca` | All seven routes in PRIMARY_FLOW_ROUTES list and scanning at both viewports | Halo  |
+| A3  | FAIL-verdict primary-flow scan                                                             | `npm run test:a11y -- a11y-fail-flow.spec.ts`                                                                                        | Zero Critical / Serious; verdict screen color-pair PASS                     | Halo  |
+
+### 9.3 Lighthouse — five hero routes
+
+Target: performance ≥90 + accessibility ≥95 + best-practices ≥90 + SEO ≥95.
+
+| Route             | Performance | Accessibility | Best practices | SEO | Owner       |
+| ----------------- | ----------- | ------------- | -------------- | --- | ----------- |
+| `/` (landing)     | ≥90         | ≥95           | ≥90            | ≥95 | Vega + Halo |
+| `/pricing`        | ≥90         | ≥95           | ≥90            | ≥95 | Vega + Halo |
+| `/audit`          | ≥90         | ≥95           | ≥90            | ≥95 | Vega + Halo |
+| `/blog/why-audit` | ≥90         | ≥95           | ≥90            | ≥95 | Vega + Halo |
+| `/modes`          | ≥90         | ≥95           | ≥90            | ≥95 | Vega + Halo |
+
+Run: `npx lighthouse <url> --quiet --chrome-flags="--headless" --output=json --output-path=./lighthouse-<slug>.json`. Verify each `categories.<axis>.score * 100 ≥ target`. Archive JSON in `operations/lighthouse-T0/`.
+
+### 9.4 Security headers — production response check
+
+`curl -sI https://studiozero.dev/` must include every header below. Any missing header is a FAIL.
+
+| Header                      | Expected value                                                       | Source |
+| --------------------------- | -------------------------------------------------------------------- | ------ |
+| `Content-Security-Policy`   | `default-src 'self'; …` (full policy from `apps/web/next.config.ts`) | Shield |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload`                       | Forge  |
+| `X-Content-Type-Options`    | `nosniff`                                                            | Shield |
+| `X-Frame-Options`           | `DENY`                                                               | Shield |
+| `Referrer-Policy`           | `strict-origin-when-cross-origin`                                    | Shield |
+| `Permissions-Policy`        | `camera=(), microphone=(), geolocation=(), interest-cohort=()`       | Shield |
+| `X-AI-Generated`            | `studio-zero` (EU AI Act Art. 50 interim)                            | Comply |
+
+HSTS preload submitted to `hstspreload.org` per Shield M3; verify the domain appears on the Chrome preload list at T-7 before this gate runs.
+
+### 9.5 Cookie banner — first-visit verification
+
+| #   | Check                                                                                           | Pass criterion                                                                                      | Owner       |
+| --- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------- |
+| C1  | Cookie banner renders on first visit to production `/` in incognito (Chrome + Firefox + Safari) | Banner visible at bottom of viewport, three buttons (Accept all / Reject all / Customize)           | Lens + Vega |
+| C2  | Banner is keyboard-accessible                                                                   | Tab order: Accept → Reject → Customize → close. Esc dismisses. Focus returns to triggering element. | Halo        |
+| C3  | Analytics fires only after consent                                                              | PostHog network call absent until user clicks Accept all or Customize → analytics ON                | Lens        |
+| C4  | Consent persists in `sz_consent` localStorage after first interaction                           | Reload → banner does not re-render                                                                  | Lens        |
+| C5  | Status route at `/status` does not gate analytics on consent                                    | `/status` traffic counted regardless (operational transparency, IA sitemap row)                     | Lens        |
+
+### 9.6 SEO surface check — production response
+
+| #   | Check                                                                                                                                                                      | Pass criterion                                                             | Owner        |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------ |
+| S1  | `https://studiozero.dev/sitemap.xml` returns 200 with every public route enumerated in `apps/web/app/sitemap.ts`                                                           | All 16 routes present                                                      | Vega         |
+| S2  | `https://studiozero.dev/robots.txt` returns 200, allows public marketing, disallows `/app/`, `/api/`, `/admin/`, `/auth/`, `/onboarding/`, `/healthz`, `/signup`, `/login` | All Disallow lines present, Sitemap line correct                           | Vega         |
+| S3  | Every public route returns 200 with non-empty `<title>`, `<meta name="description">`, and a canonical `<link rel="canonical">`                                             | All checks PASS via `curl + grep` script                                   | Vega         |
+| S4  | Open Graph image renders on Twitter / LinkedIn / Slack unfurl test                                                                                                         | Test unfurl on /, /pricing, /audit, /blog/why-audit                        | Pixel + Vega |
+| S5  | Structured data validates                                                                                                                                                  | Google Rich Results test on /pricing (Product) + /blog/why-audit (Article) | Vega         |
+
+### 9.7 Sentry + PostHog — production telemetry verification
+
+| #   | Check                                                                                 | Pass criterion                                                                                | Owner  |
+| --- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------ |
+| T1  | Sentry production project receives synthetic error within 60s of a controlled trigger | Synthetic event ID lands in Sentry dashboard                                                  | Watch  |
+| T2  | `surface: app` and `surface: marketing` tags fire correctly on captured events        | Tag distribution visible in Sentry dashboard                                                  | Watch  |
+| T3  | `beforeSend` PII redaction active (Cipher M4)                                         | Synthetic event with PII payload arrives with PII redacted                                    | Cipher |
+| T4  | PostHog primary-route page views captured (Lens analytics-events.v1)                  | `pageview` events visible for `/`, `/pricing`, `/audit`, `/modes`, `/blog`, `/blog/why-audit` | Lens   |
+| T5  | Status-page link present in app-shell footer (Watch M4)                               | Footer renders `<a href="https://status.studiozero.dev">Status</a>` on every authed page      | Watch  |
+
+### 9.8 Marketing-site Sentry tagging
+
+Per M5 §G — single project, two tags:
+
+- `apps/web` Sentry project covers both app shell and customer-facing surface.
+- Events arriving from `app/app/**/*` routes tagged `surface: app`.
+- Events arriving from `app/(marketing public routes)` tagged `surface: marketing`.
+- A marketing-only project would be over-engineering at M5; one project with the `surface` tag is sufficient. Decision recorded; revisit at V1.5 if event volume diverges materially.
+
+### 9.9 Final binary — go / no-go
+
+| Gate                                      | Pass criterion                                             | Sign-off                 |
+| ----------------------------------------- | ---------------------------------------------------------- | ------------------------ |
+| All F1–F5 green                           | regression matrix CLEAN                                    | Pipeline + Forge + Atlas |
+| All A1–A3 green                           | axe-core zero Critical/Serious                             | Halo                     |
+| All Lighthouse scores meet target         | five hero routes                                           | Vega + Halo              |
+| All security headers present              | production response                                        | Shield + Forge           |
+| Cookie banner working                     | first-visit checks PASS                                    | Lens + Vega              |
+| SEO surfaces correct                      | sitemap + robots + titles + canonical                      | Vega                     |
+| Sentry + PostHog wired                    | telemetry verification PASS                                | Watch + Lens             |
+| DMCA agent registered or filing in flight | `compliance/dmca-designated-agent.md` + `/dmca` route LIVE | Comply                   |
+
+**Single binary verdict — GO / NO-GO** signed off by Sprint + BigBrain + Jo at T-1 evening. Any NO-GO halts the 06:00 UTC deploy until resolved.
+
+---
+
 _Day-zero runbook v1.0 (M4 Batch 2). Watch + Signal jointly own. v2 supersedes after T+30 retro with actual-vs-planned variance flagged._

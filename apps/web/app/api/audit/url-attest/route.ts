@@ -43,8 +43,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Verbatim PRD §14.7 attestation text — Herald-locked. Any edit here
- *  must also update the intake checkbox label + Comply's copy review. */
-export const URL_AUDIT_ATTESTATION_TEXT =
+ *  must also update the intake checkbox label + Comply's copy review.
+ *  NOTE: Next.js 15 disallows non-route exports from route.ts files;
+ *  this constant is module-local. If shared with a UI surface in
+ *  future, re-home it to `lib/aup-attestation.ts`. */
+const URL_AUDIT_ATTESTATION_TEXT =
   "I am the owner of, or have written authorization to audit, the URL above.";
 
 interface AttestBody {

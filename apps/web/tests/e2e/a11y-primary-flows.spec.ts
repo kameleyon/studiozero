@@ -106,9 +106,49 @@ const PRIMARY_FLOW_ROUTES: ReadonlyArray<{
     authed: false,
     why: "Conformance statement itself must be exemplary.",
   },
-  // /pricing not yet shipped as a distinct route; included as a comment
-  // so the spec is one-line ready when HC7 pricing table lands.
-  // { path: "/pricing", slug: "pricing", authed: false, why: "HC7 pricing table reflow." },
+  // ─── M5 launch routes (Vega + Forge) ─────────────────────────────
+  {
+    path: "/pricing",
+    slug: "pricing",
+    authed: false,
+    why: "HC7 pricing table reflow + Herald-locked copy.",
+  },
+  {
+    path: "/audit",
+    slug: "audit-explainer",
+    authed: false,
+    why: "M5 — landing-style explainer for the audit product.",
+  },
+  {
+    path: "/build",
+    slug: "build-placeholder",
+    authed: false,
+    why: "M5 — V2 placeholder + demand-gate signup.",
+  },
+  {
+    path: "/modes",
+    slug: "modes-comparison",
+    authed: false,
+    why: "M5 — BYOK / CLI / Managed comparison table.",
+  },
+  {
+    path: "/blog",
+    slug: "blog-index",
+    authed: false,
+    why: "M5 — blog index with launch post.",
+  },
+  {
+    path: "/blog/why-audit",
+    slug: "blog-why-audit",
+    authed: false,
+    why: "M5 — Herald-locked launch blog post + Article JSON-LD.",
+  },
+  {
+    path: "/dmca",
+    slug: "dmca",
+    authed: false,
+    why: "M5 — DMCA designated agent + takedown procedure.",
+  },
 ];
 
 // ─── Viewports per SC 1.4.10 ───────────────────────────────────────────

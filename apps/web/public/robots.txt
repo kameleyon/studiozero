@@ -1,4 +1,17 @@
+# Studio Zero — robots.txt (M5 Vega + Forge)
+# Allow public marketing, legal, blog. Disallow app shell, admin, auth callbacks.
+# Per ia/sitemap.md §"SEO posture summary" + PRD §12 SEO Crits.
+
 User-agent: *
 Allow: /
+
+Disallow: /app/
+Disallow: /api/
+Disallow: /admin/
+Disallow: /auth/
+Disallow: /onboarding/
+Disallow: /healthz
+Disallow: /signup
+Disallow: /login
 
 Sitemap: https://studiozero-omega.vercel.app/sitemap.xml
