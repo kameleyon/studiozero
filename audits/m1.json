@@ -1,0 +1,105 @@
+{
+  "milestone": "M1",
+  "audit_id": "m1-self-dogfood-2026-05-12",
+  "auditor": "Jury (self-dogfood gate per BUILD_FLOW.md Phase 9 + sprint/milestone-M1.md)",
+  "date": "2026-05-12",
+  "subject_commit_range": "0b9e196..HEAD",
+  "score_engine_version": "v1",
+  "runner_mode": "simulated (runner not deployed; reviewers reason over codebase per agents/audit/*.md rubrics)",
+  "reviewer_scorecard": {
+    "optic": {
+      "verdict": "PASS",
+      "rationale": "Hick's-Law collapse held since OPT-M3; verdict screen mode-pick + onboarding flow unchanged in M1."
+    },
+    "halo": {
+      "verdict": "PASS WITH FIXES",
+      "rationale": "axe-core gate active on 12 routes x 2 viewports. Probe's Playwright run surfaced 3 real product violations (Major): /signup divider 3.74:1 SC 1.4.3 FAIL; /app/audits/run-demo-1 verdict-card 25 serious violations on #c8421a background (score paragraph + Export ghost button + finding-id eyebrows under 4.5:1); mobile-320 AppShell 166px horizontal overflow SC 1.4.10 FAIL. All Vega/Pixel fixes, <1 day work."
+    },
+    "proof": {
+      "verdict": "PASS",
+      "rationale": "Herald copy locked at Phase 6; legal-doc copy in Comply commit reviewed and idiomatic (Flesch in target band for ToS/Privacy/AUP)."
+    },
+    "compass": {
+      "verdict": "PASS",
+      "rationale": "P1 technical-founder primary persona served by mock flow + BYOK lane; no persona-fit regression."
+    },
+    "trace": {
+      "verdict": "PASS",
+      "rationale": "signup-to-first-verdict + audit-run-state-machine flows align with ia/user-flows/*.md. State machine in apps/runner/src/run-state-machine.ts mirrors the documented states."
+    },
+    "canon": {
+      "verdict": "PASS",
+      "rationale": "Token discipline held (Canon's Phase-4 drift detector passes); no template-orange leak audited in M1 commits; legal-markdown.tsx uses brand tokens."
+    }
+  },
+  "findings": [
+    {
+      "id": "M1-H1",
+      "severity": "Major",
+      "owner": "Vega + Pixel",
+      "title": "/signup divider contrast 3.74:1 fails WCAG 2.2 SC 1.4.3 (1.4.11 non-text)",
+      "evidence": "Probe Playwright axe run on /signup (commit dfab838) — divider element between OAuth + email block.",
+      "ref": "apps/web/app/signup/page.tsx",
+      "fix": "Bump divider stroke to a token ≥4.5:1 against panel-bg, or move to a label-anchored hr with text shimmed in. Re-run axe on /signup at 320 + 1280."
+    },
+    {
+      "id": "M1-H2",
+      "severity": "Major",
+      "owner": "Vega + Pixel",
+      "title": "/app/audits/run-demo-1 verdict-card: 25 serious axe violations — score paragraph + body paragraphs + Export ghost button + finding-id eyebrows all under 4.5:1 on #c8421a FAIL background",
+      "evidence": "Probe Playwright axe run on /app/audits/run-demo-1 (commit dfab838).",
+      "ref": "apps/web/components/VerdictCard.tsx + ScoreDisplay + FindingsRow + Export button",
+      "fix": "Audit every text-on-FAIL-red foreground token; raise to AAA on the FAIL surface (Halo's HC1 already states the FAIL color is a load-bearing channel — text on it has to clear 4.5:1 minimum). Suggest a token sz.color.fail.fg.onSurface that pins white or near-white for body copy, and a separate sz.color.fail.fg.muted for finding-id eyebrows that still clears 4.5:1."
+    },
+    {
+      "id": "M1-H3",
+      "severity": "Major",
+      "owner": "Vega",
+      "title": "Mobile-320 AppShell horizontal overflow 166px — fails WCAG SC 1.4.10 Reflow",
+      "evidence": "Probe Playwright run at viewport 320x640 (commit dfab838).",
+      "ref": "apps/web/components/AppShell.tsx",
+      "fix": "Audit fixed-width children of AppShell; replace any min-width pixels with max-content + overflow-x:auto on the inner shell where horizontal scroll is meaningful (e.g., wide tables), and use container queries elsewhere. Re-run axe at 320 px."
+    },
+    {
+      "id": "M1-X1",
+      "severity": "Minor",
+      "owner": "Atlas",
+      "title": "apps/web /api/runs POST calls service.rpc('enqueue_audit_run', ...) but 0002 migration does not define enqueue_audit_run",
+      "evidence": "Grep across architecture/database/migrations returns zero matches for 'enqueue_audit_run'; the call in apps/web/app/api/runs/route.ts:299 is wrapped in a silent try/catch so the system degrades to runner-reconcile-on-queued. Acceptable as M1 (runner not deployed), but the wrapper function MUST land before M2 because M2 introduces Managed mode which is queue-latency-sensitive.",
+      "ref": "apps/web/app/api/runs/route.ts:299 + architecture/database/migrations/0002_rls_and_runner_jwt.sql",
+      "fix": "Add enqueue_audit_run(p_run_id uuid, p_tenant_id uuid) SECURITY DEFINER wrapper around boss.send('audit-run', ...) in 0002 (or a 0002b patch). The runner already subscribes to AUDIT_QUEUE_NAME = 'audit-run' (apps/runner/src/pg-boss-worker.ts:51)."
+    },
+    {
+      "id": "M1-X2",
+      "severity": "Minor",
+      "owner": "Forge",
+      "title": "Runner state machine persistence stubbed at M1",
+      "evidence": "apps/runner/src/run-state-machine.ts header: 'persistence of runs.state is stubbed at M1 — actual UPDATE call lands at M1+1 when runs table is queryable from this worker'.",
+      "ref": "apps/runner/src/run-state-machine.ts top comment.",
+      "fix": "M1+1 carry (already documented). No M1 gate fail."
+    },
+    {
+      "id": "M1-X3",
+      "severity": "Polish",
+      "owner": "Verify",
+      "title": "15 integration skips all carry M1+1 reason comments — discipline held; nothing silent",
+      "evidence": "grep skip across tests/integration/*.spec.ts; every skip describes the missing infra (Vault, Testcontainers Postgres, Forge clone module, apps/web node_modules).",
+      "ref": "tests/integration/cryptoshredding.spec.ts:21, goal-5-rls-cross-tenant.spec.ts:64, vault-aad-required.spec.ts:78, github-app-clone.spec.ts:48",
+      "fix": "No fix needed — Verify followed the M0 discipline pattern correctly. Note positively."
+    }
+  ],
+  "score_calculation": {
+    "method": "score_engine.v1 (severity weights: Blocker=100, Critical=18, Major=7, Minor=2, Polish=0). FAIL precedence on any Blocker.",
+    "blocker_count": 0,
+    "critical_count": 0,
+    "major_count": 3,
+    "minor_count": 2,
+    "polish_count": 1,
+    "raw_score": "100 - (3 * 7) - (2 * 2) - (1 * 0) = 75",
+    "rounded_score": 75
+  },
+  "verdict": "PASS WITH FIXES",
+  "verdict_rationale": "Score 75 (>= 70 threshold) with 0 Blockers + 0 Criticals + 3 Majors. Halo's 3 product a11y findings are real bugs but polish-stage (pre-launch, mock-flow customer surface), so Major rather than Critical per Jury severity rubric in agents/audit/jury.md §Rules. Both Vega/Pixel fix items are <1 day work. Cross-cutting findings (enqueue wrapper missing, state-machine persistence stubbed) are explicitly documented M1+1 carries — Forge + Atlas both flagged in their own commits.",
+  "m2_start_recommendation": "Proceed to M2 ticket-cut in parallel with the 3 Halo fixes (M1-H1, M1-H2, M1-H3). Block M2 exit gate on those fixes landing + axe re-run green. The enqueue wrapper (M1-X1) MUST land before M2 exit because Managed mode is queue-latency-sensitive.",
+  "regression_guard_m0": "M0 gates remain green (full pnpm test: 396 passed / 15 skipped / 0 failed)."
+}
