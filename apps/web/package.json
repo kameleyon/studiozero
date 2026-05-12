@@ -18,12 +18,12 @@
     "test:a11y": "playwright test a11y-fail-flow.spec.ts a11y-primary-flows.spec.ts"
   },
   "dependencies": {
-    "@sentry/nextjs": "^8.55.2",
+    "@sentry/nextjs": "^10.53.1",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
-    "next": "15.5.18",
+    "next": "16.2.6",
     "posthog-js": "^1.166.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
