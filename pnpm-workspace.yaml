@@ -1,0 +1,22 @@
+packages:
+  - "apps/*"
+
+# Phase 9 M0 — Verify: pnpm 11 ships `verifyDepsBeforeRun` ON by default
+# and errors when any package has an ignored build script (esbuild ships
+# CPU-specific binaries via postinstall). The build scripts ARE approved
+# via `onlyBuiltDependencies` below, but pnpm's status check still trips
+# on the "ignored builds for unused arch binaries" warning. Disabling
+# the pre-run dep check makes `pnpm test` runnable in CI without
+# interactive approval. CI's separate `pnpm install --frozen-lockfile`
+# step keeps the real dep-integrity guarantee.
+verifyDepsBeforeRun: false
+
+allowBuilds:
+  esbuild: set this to true or false
+  sharp: set this to true or false
+  unrs-resolver: set this to true or false
+
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+  - unrs-resolver
