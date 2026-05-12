@@ -17,6 +17,11 @@ node_modules/
 # TypeScript
 *.tsbuildinfo
 
+# Playwright artifacts (Halo a11y gate + Probe e2e)
+playwright-report/
+test-results/
+.playwright/
+
 # OS / IDE
 .DS_Store
 Thumbs.db

@@ -12,7 +12,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium",
+    "test:a11y": "playwright test a11y-fail-flow.spec.ts a11y-primary-flows.spec.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^8.55.2",
@@ -21,12 +24,16 @@
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "next": "15.5.18",
+    "posthog-js": "^1.166.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "server-only": "^0.0.1",
     "stripe": "^17.7.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "^1.49.1",
+    "axe-core": "^4.10.2",
     "@types/node": "22.10.5",
     "@types/react": "19.0.4",
     "@types/react-dom": "19.0.2",
