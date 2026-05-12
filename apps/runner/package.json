@@ -1,0 +1,32 @@
+{
+  "name": "@studiozero/runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Studio Zero — hosted audit runner. Phase 9 M1 Batch 2 (Forge-2). Long-running Node TS worker that consumes pg-boss jobs from Postgres and drives audit reviewers. Runs as a stateful container on Railway us-east per ARCH-D2; authenticates to Supabase via short-lived runner JWTs minted at job pickup per ARCH-D3 (NEVER holds the service-role key); LLM calls go through Cipher's gateway per ARCH-D7 (NEVER holds the raw Anthropic key).",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "echo 'lint wired in M1 batch 3'"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "pg-boss": "^10.1.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@vitest/coverage-v8": "^2.1.9",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}

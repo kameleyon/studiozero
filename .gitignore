@@ -23,6 +23,12 @@ apps/web/out/
 apps/web/next-env.d.ts
 apps/web/*.tsbuildinfo
 
+# apps/runner — Node TS worker build outputs
+apps/runner/dist/
+apps/runner/node_modules/
+apps/runner/coverage/
+apps/runner/*.tsbuildinfo
+
 # OS / IDE
 .DS_Store
 Thumbs.db
