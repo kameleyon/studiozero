@@ -1,0 +1,213 @@
+# Supabase CLI configuration for the studiozero project.
+#
+# Applied via:  supabase link --project-ref <ref> && supabase config push
+#
+# Owner: Terra (this file) + Atlas (auth/db tuning at M1+).
+# Scope: project-level settings that the Supabase CLI manages.
+#        Schema, RLS, and Edge Function code are NOT managed here —
+#        they live in:
+#          - architecture/database/migrations/     (Atlas)
+#          - supabase/functions/<fn-name>/index.ts (Atlas + Pipeline)
+#
+# Region pin (us-east-1) is set at project-create time in the dashboard,
+# NOT here — config.toml has no region knob.
+
+# ─────────────────────────────────────────────────────────────────────
+# project_id — Supabase reference id (NOT a secret; identifies project)
+# ─────────────────────────────────────────────────────────────────────
+# REPLACE on bootstrap. Captured into TF_VAR_supabase_project_ref.
+project_id = "REPLACE_WITH_PROJECT_REF"
+
+# ─────────────────────────────────────────────────────────────────────
+# API (PostgREST) — schemas exposed to the public API
+# ─────────────────────────────────────────────────────────────────────
+[api]
+enabled = true
+port = 54321
+# Schemas the public API can see. `public` is the application schema;
+# `graphql_public` is Supabase's auto-generated GraphQL surface
+# (harmless; same RLS applies). pg-boss queue tables live in their
+# own `pgboss` schema and are NOT exposed via the API — workers
+# connect via service-role JWT instead.
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+# ─────────────────────────────────────────────────────────────────────
+# Database
+# ─────────────────────────────────────────────────────────────────────
+[db]
+port = 54322
+# Postgres major version. Pin to 15 to match prod (Supabase Pro
+# default at project create time). Bumping requires a coordinated
+# Atlas migration test pass.
+major_version = 15
+
+[db.pooler]
+enabled = true
+port = 54329
+pool_mode = "transaction"
+# Web app uses transaction mode; runner uses session mode (it holds
+# a connection for the duration of a job's heartbeat — see
+# architecture/database/runner-jwt.md).
+default_pool_size = 20
+max_client_conn = 100
+
+# Statement timeout. 30s for normal API queries; longer-running
+# analytics happen in Edge Functions with their own timeout knobs.
+[db.statement_timeout]
+default = "30s"
+
+# ─────────────────────────────────────────────────────────────────────
+# Studio (the Supabase dashboard's "Database" tab)
+# ─────────────────────────────────────────────────────────────────────
+[studio]
+enabled = true
+port = 54323
+
+# ─────────────────────────────────────────────────────────────────────
+# Auth (GoTrue) — providers, JWT settings, redirect URLs
+# ─────────────────────────────────────────────────────────────────────
+[auth]
+enabled = true
+# Site URL — Auth redirects (post-login, magic-link landing) bounce
+# through this origin. Switches from staging → prod at M0 wk-2 when
+# studiozero.dev DNS lands.
+site_url = "https://studiozero.dev"
+# Additional redirect URLs that Auth treats as trusted (PR previews,
+# localhost dev, CLI loopback for pairing).
+additional_redirect_urls = [
+  "https://studiozero-omega.vercel.app",
+  "https://*.vercel.app",            # PR previews (Vercel wildcard)
+  "http://localhost:3000",            # local dev
+  "http://127.0.0.1:54321"            # local Supabase CLI
+]
+
+# JWT lifetimes — defaults are reasonable for MVP. Browser session
+# uses access (1h) + refresh (30d). Runner JWTs are SEPARATE — minted
+# by the `mint-runner-token` Edge Function with a 5-min TTL per
+# ARCH-D3 / Cipher Fix-3a / Atlas runner-jwt.md.
+jwt_expiry = 3600          # 1h access token
+refresh_token_rotation_enabled = true
+refresh_token_reuse_interval = 10  # seconds
+
+# Email auth
+[auth.email]
+enable_signup = true
+enable_confirmations = true       # double opt-in
+double_confirm_changes = true
+
+# Magic-link / OTP delivery via Supabase's built-in SMTP at M0; swaps
+# to Resend SMTP at M4 when Echo wires E1–E5. The swap is a
+# config.toml edit + Resend SMTP credentials in Supabase dashboard.
+
+# OAuth providers — credentials are set in the dashboard (NOT here)
+# because they include client_secret which we never commit.
+# Provider toggles live here for declarative tracking only.
+[auth.external.google]
+enabled = true
+# client_id + client_secret → Supabase dashboard → Auth → Providers
+
+[auth.external.github]
+enabled = true
+# client_id + client_secret → Supabase dashboard → Auth → Providers
+
+# Disable all other providers explicitly so they can't be silently
+# enabled in the dashboard without an IaC change.
+[auth.external.apple]
+enabled = false
+[auth.external.azure]
+enabled = false
+[auth.external.bitbucket]
+enabled = false
+[auth.external.discord]
+enabled = false
+[auth.external.facebook]
+enabled = false
+[auth.external.figma]
+enabled = false
+[auth.external.gitlab]
+enabled = false
+[auth.external.kakao]
+enabled = false
+[auth.external.keycloak]
+enabled = false
+[auth.external.linkedin]
+enabled = false
+[auth.external.notion]
+enabled = false
+[auth.external.slack]
+enabled = false
+[auth.external.spotify]
+enabled = false
+[auth.external.twitch]
+enabled = false
+[auth.external.twitter]
+enabled = false
+[auth.external.workos]
+enabled = false
+[auth.external.zoom]
+enabled = false
+
+# ─────────────────────────────────────────────────────────────────────
+# Storage
+# ─────────────────────────────────────────────────────────────────────
+[storage]
+enabled = true
+# Default file size cap; per-bucket overrides set in Atlas migrations.
+file_size_limit = "50MiB"
+# Image transformation included with Pro tier; useful for evidence
+# screenshot thumbnails on verdict-card.
+[storage.image_transformation]
+enabled = true
+
+# ─────────────────────────────────────────────────────────────────────
+# Realtime
+# ─────────────────────────────────────────────────────────────────────
+[realtime]
+enabled = true
+# Realtime uses the same Postgres replication slot as Supabase
+# manages internally — no extra config needed at this layer.
+
+# ─────────────────────────────────────────────────────────────────────
+# Edge Functions — deployed via `supabase functions deploy <name>`
+# from CI. config.toml just declares which functions exist so the
+# CLI knows what to scaffold + lint.
+# ─────────────────────────────────────────────────────────────────────
+[functions.mint-runner-token]
+# ARCH-D3 — only minter of runner JWTs. Service-role auth required.
+verify_jwt = true
+
+[functions.byok-validate]
+# ARCH-D7 — Anthropic dry-run for BYOK keys; isolates log scope.
+verify_jwt = true
+
+[functions.score-engine]
+# ARCH-D7 — single source of truth for deterministic score compute.
+verify_jwt = true
+
+[functions.stripe-webhook]
+# ARCH-D4 + ARCH-D7 — Stripe HMAC signature verify; co-located with DB.
+# verify_jwt = false because the signature IS the auth (HMAC), not a JWT.
+verify_jwt = false
+
+[functions.github-webhook]
+# ARCH-D7 — GitHub HMAC signature verify; co-located with DB.
+verify_jwt = false
+
+[functions.jury-reaudit-gate]
+# V1.5 only; declared early so the deploy path is rehearsed at M1.
+verify_jwt = true
+
+[functions.refresh-runner-token]
+# ARCH-D3 — runner heartbeat refresh RPC. Same auth as mint.
+verify_jwt = true
+
+# ─────────────────────────────────────────────────────────────────────
+# Analytics (Supabase-internal usage metrics, not PostHog)
+# ─────────────────────────────────────────────────────────────────────
+[analytics]
+enabled = true
+port = 54327
+
+# End of config.toml. Apply with:  supabase config push

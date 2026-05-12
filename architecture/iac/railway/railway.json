@@ -1,0 +1,65 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "_doc": [
+    "Studio Zero runner-worker service spec.",
+    "Owner: Terra (this file) + Forge (runner code) + Shield (sandbox primitives).",
+    "Status at M0: STUB. Service does not deploy at M0 — first deploy lands at M1",
+    "when Forge writes apps/runner/Dockerfile + the runner package.",
+    "Region us-east per ARCH-D2.",
+    "Egress allowlist (TB-4) enforced at the network-policy layer at M1 per ARCH-D9 (open follow-up).",
+    "Values listed under 'variables' are KEYS only — values are entered via Railway dashboard."
+  ],
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "apps/runner/Dockerfile",
+    "_note_dockerfilePath": "Forge writes this at M1; at M0 the path does not yet exist — service deploy is gated until then."
+  },
+  "deploy": {
+    "region": "us-east",
+    "startCommand": "node dist/worker.js",
+    "_note_startCommand": "Worker process polls pg-boss in a loop; never exits cleanly. Railway restart-on-exit ensures liveness if the loop crashes.",
+    "healthcheckPath": "/healthz",
+    "healthcheckTimeout": 30,
+    "_note_healthcheck": "Worker exposes a tiny HTTP server on PORT (Railway-assigned) returning 200 if the pg-boss client is connected and last-job-poll succeeded within 60s.",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "numReplicas": 1,
+    "_note_numReplicas": "1 always-on at M1 launch; horizontal scale to 2-3 at peak load (M2+). Workers are stateless; horizontal scale is just more containers polling pg-boss."
+  },
+  "service": {
+    "name": "runner-worker",
+    "sleepMode": false,
+    "_note_sleepMode": "Sleep would miss queue polls. NEVER enable."
+  },
+  "variables_keys_only": [
+    "SUPABASE_URL",
+    "SUPABASE_RUNNER_BOOTSTRAP_KEY",
+    "NODE_ENV",
+    "SENTRY_DSN",
+    "POSTHOG_KEY",
+    "LOG_LEVEL"
+  ],
+  "_note_variables": "These KEYS are documented in architecture/iac/railway/project.md §'Env-vars'. Values are set via Railway dashboard (or `railway variables set <K> <V>`) at M1 by Jo; never committed.",
+  "security_opts_spec": {
+    "_note": "Railway exposes security-opts via the dashboard at the service level. Set these manually at M1 ship per ARCH-D8.",
+    "no-new-privileges": "true",
+    "seccomp": "path:./architecture/iac/runner-pool/seccomp.json (Shield writes at M1)",
+    "cap-drop": "ALL",
+    "cap-add": [],
+    "user": "node (non-root)",
+    "read-only-rootfs": true,
+    "tmpfs": "/var/runs (size-limit 2g; runner writes per-run workspace here)"
+  },
+  "network_policy_spec": {
+    "_note": "Cilium NetworkPolicy enforced at M1 per ARCH-D9 (open). Egress allowlist hostnames listed below; YAML written by Shield at architecture/iac/runner-pool/network-policy.yaml.",
+    "egress_allowlist": [
+      "*.supabase.co (own project host)",
+      "api.anthropic.com",
+      "api.github.com",
+      "codeload.github.com",
+      "objects.githubusercontent.com",
+      "<customer audited URL host — per-run dynamic>"
+    ],
+    "egress_default": "DROP"
+  }
+}
