@@ -54,6 +54,17 @@ export interface MockStripeProduct {
   metadata: Record<string, string>;
 }
 
+export interface MockRefundCreateCall {
+  params: Record<string, unknown>;
+  opts?: { idempotencyKey?: string };
+}
+
+export interface MockInvoiceFixture {
+  id: string;
+  payment_intent: string | null;
+  amount_paid: number;
+}
+
 export interface MockStripe {
   /** ctor invocation log. */
   ctorCalls: Array<{ secret: string; opts: { apiVersion: string } }>;
@@ -70,6 +81,10 @@ export interface MockStripe {
   portalCreateCalls: Array<Record<string, unknown>>;
   /** webhooks.constructEventAsync call log. */
   webhookVerifyCalls: Array<{ rawBody: string; sig: string }>;
+  /** refunds.create call log (M2 Batch 3 — CA pro-rata refund). */
+  refundCreateCalls: MockRefundCreateCall[];
+  /** invoices.retrieve call log. */
+  invoiceRetrieveCalls: string[];
 
   /** Pre-staged checkout-session result (used both for create + retrieve). */
   stubCheckoutSession: MockStripeSession | null;
@@ -83,6 +98,10 @@ export interface MockStripe {
   stubPortalUrl: string;
   /** Pre-staged constructEventAsync return; the rawBody key indexes them. */
   stubEvents: Map<string, unknown>;
+  /** Pre-staged refund id returned by refunds.create. */
+  stubRefundId: string;
+  /** Pre-staged invoice fixtures (by invoice id). */
+  stubInvoices: Map<string, MockInvoiceFixture>;
 
   /** Throw flags to force error paths. */
   throwOnCheckoutCreate: Error | null;
@@ -90,6 +109,8 @@ export interface MockStripe {
   throwOnSubscriptionRetrieve: Error | null;
   throwOnPortalCreate: Error | null;
   throwOnWebhookVerify: Error | null;
+  throwOnRefundCreate: Error | null;
+  throwOnInvoiceRetrieve: Error | null;
 }
 
 export const mockStripeState: MockStripe = {
@@ -100,17 +121,23 @@ export const mockStripeState: MockStripe = {
   productRetrieveCalls: [],
   portalCreateCalls: [],
   webhookVerifyCalls: [],
+  refundCreateCalls: [],
+  invoiceRetrieveCalls: [],
   stubCheckoutSession: null,
   stubCheckoutSessionsByCs: new Map(),
   stubSubscriptions: new Map(),
   stubProducts: new Map(),
   stubPortalUrl: "https://billing.stripe.com/p/session/test_portal",
   stubEvents: new Map(),
+  stubRefundId: "re_TEST_DEFAULT",
+  stubInvoices: new Map(),
   throwOnCheckoutCreate: null,
   throwOnCheckoutRetrieve: null,
   throwOnSubscriptionRetrieve: null,
   throwOnPortalCreate: null,
   throwOnWebhookVerify: null,
+  throwOnRefundCreate: null,
+  throwOnInvoiceRetrieve: null,
 };
 
 export function resetMockStripe(): void {
@@ -121,17 +148,23 @@ export function resetMockStripe(): void {
   mockStripeState.productRetrieveCalls = [];
   mockStripeState.portalCreateCalls = [];
   mockStripeState.webhookVerifyCalls = [];
+  mockStripeState.refundCreateCalls = [];
+  mockStripeState.invoiceRetrieveCalls = [];
   mockStripeState.stubCheckoutSession = null;
   mockStripeState.stubCheckoutSessionsByCs.clear();
   mockStripeState.stubSubscriptions.clear();
   mockStripeState.stubProducts.clear();
   mockStripeState.stubEvents.clear();
+  mockStripeState.stubInvoices.clear();
   mockStripeState.stubPortalUrl = "https://billing.stripe.com/p/session/test_portal";
+  mockStripeState.stubRefundId = "re_TEST_DEFAULT";
   mockStripeState.throwOnCheckoutCreate = null;
   mockStripeState.throwOnCheckoutRetrieve = null;
   mockStripeState.throwOnSubscriptionRetrieve = null;
   mockStripeState.throwOnPortalCreate = null;
   mockStripeState.throwOnWebhookVerify = null;
+  mockStripeState.throwOnRefundCreate = null;
+  mockStripeState.throwOnInvoiceRetrieve = null;
 }
 
 /**
@@ -216,6 +249,29 @@ export function makeStripeMockModule(): { default: unknown } {
             }
             return { url: mockStripeState.stubPortalUrl };
           },
+        },
+      },
+      refunds: {
+        async create(
+          params: Record<string, unknown>,
+          reqOpts?: { idempotencyKey?: string },
+        ) {
+          mockStripeState.refundCreateCalls.push({ params, opts: reqOpts });
+          if (mockStripeState.throwOnRefundCreate) {
+            throw mockStripeState.throwOnRefundCreate;
+          }
+          return { id: mockStripeState.stubRefundId, status: "succeeded" };
+        },
+      },
+      invoices: {
+        async retrieve(id: string) {
+          mockStripeState.invoiceRetrieveCalls.push(id);
+          if (mockStripeState.throwOnInvoiceRetrieve) {
+            throw mockStripeState.throwOnInvoiceRetrieve;
+          }
+          const f = mockStripeState.stubInvoices.get(id);
+          if (f) return f;
+          return { id, payment_intent: null, amount_paid: 0 };
         },
       },
     };

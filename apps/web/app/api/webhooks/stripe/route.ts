@@ -227,7 +227,7 @@ export async function POST(req: Request): Promise<Response> {
         await handleSubscriptionUpdated(supabase, stripe, event, tenantId);
         break;
       case "customer.subscription.deleted":
-        await handleSubscriptionDeleted(supabase, event);
+        await handleSubscriptionDeleted(supabase, stripe, event, tenantId);
         break;
       case "customer.subscription.trial_will_end":
         // Trigger E3 email — Herald owns content; M2 emits the event only.
@@ -469,17 +469,224 @@ async function handleSubscriptionUpdated(
 
 async function handleSubscriptionDeleted(
   supabase: Supa,
+  stripe: Stripe,
   event: Stripe.Event,
+  tenantId: string,
 ): Promise<void> {
   const sub = event.data.object as Stripe.Subscription;
+  const nowIso = new Date().toISOString();
+
+  // Read the local subscription row BEFORE updating; we need region + period
+  // bounds + latest_invoice to compute pro-rata and locate the PaymentIntent.
+  const { data: subRow } = await supabase
+    .from("subscriptions")
+    .select(
+      "id, region, current_period_start, current_period_end, stripe_customer_id, plan",
+    )
+    .eq("stripe_subscription_id", sub.id)
+    .maybeSingle();
+
   await supabase
     .from("subscriptions")
     .update({
       status: "canceled",
-      canceled_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      canceled_at: nowIso,
+      updated_at: nowIso,
     })
     .eq("stripe_subscription_id", sub.id);
+
+  // ---- G4: California SB 313 pro-rata refund branch ----------------------
+  // Comply rule (compliance/click-to-cancel-ux-audit.md §2.6 + refund-matrix
+  // §4.5): California consumers receive an automatic pro-rata refund on
+  // mid-period cancel. Idempotency key per finance/stripe-config.md §7.
+  //
+  // Cancel reason heuristic: Stripe surfaces customer-initiated cancels via
+  // sub.cancellation_details.reason === 'cancellation_requested' (Portal
+  // click). Fall back to checking cancel_at_period_end / canceled_at to
+  // distinguish from involuntary dunning cancels (which already had a
+  // dunning_step audit trail; no pro-rata applies there).
+  const row = subRow as
+    | {
+        id: string;
+        region: string;
+        current_period_start: string | null;
+        current_period_end: string | null;
+        stripe_customer_id: string | null;
+        plan: string | null;
+      }
+    | null;
+
+  const cancelReason = readCancelReason(sub);
+  const isCustomerRequest = cancelReason === "customer_request";
+
+  if (row && row.region === "california" && isCustomerRequest) {
+    await maybeIssueCaliforniaProRataRefund(
+      supabase,
+      stripe,
+      sub,
+      row,
+      tenantId,
+    );
+  }
+
+  // ---- G3: Herald cancellation-confirmation email trigger ----------------
+  // FTC §425.4(b) requires confirmation within "reasonable time"; Studio
+  // Zero commits to 60s (refund-matrix.md §4.4). The Resend dispatcher
+  // consumes audit_logs rows tagged `email_trigger` and ships within SLA.
+  if (row) {
+    await audit(supabase, tenantId, "cancellation_email_trigger", {
+      stripe_subscription_id: sub.id,
+      region: row.region,
+      template:
+        row.region === "california"
+          ? "E-cancel-ca-prorata"
+          : row.region === "eu" || row.region === "uk"
+            ? "E-cancel-eu-uk-cooling-off"
+            : "E-cancel-us-default",
+      cancel_reason: cancelReason,
+      effective_at: row.current_period_end ?? nowIso,
+      sla_target_seconds: 60,
+    });
+  }
+}
+
+/**
+ * Read Stripe's cancel reason and normalize to our canonical taxonomy:
+ *   - "customer_request"  — Portal click (Stripe reason 'cancellation_requested')
+ *   - "payment_failed"    — Dunning failure terminal cancel
+ *   - "unknown"           — Anything else
+ *
+ * Newer API versions populate `cancellation_details.reason`; we fall back
+ * to `cancel_at_period_end` for the Portal-click heuristic.
+ */
+function readCancelReason(sub: Stripe.Subscription): string {
+  const details = (sub as unknown as {
+    cancellation_details?: { reason?: string | null };
+  }).cancellation_details;
+  const raw = details?.reason ?? null;
+  if (raw === "cancellation_requested" || raw === "customer_request") {
+    return "customer_request";
+  }
+  if (raw === "payment_failed") return "payment_failed";
+  // Heuristic — Portal cancel-at-period-end flips cancel_at_period_end=true
+  // before subscription.deleted fires.
+  if (!raw && sub.cancel_at_period_end) return "customer_request";
+  return raw ?? "unknown";
+}
+
+/**
+ * Compute pro-rata refund per Cal. Bus. & Prof. Code §17602.7 and issue via
+ * stripe.refunds.create with idempotency. Audit-logs the result.
+ *
+ * Formula (refund-matrix §4.5):
+ *   refund_cents = floor((days_remaining / days_in_period) * plan_price_cents)
+ *
+ * Idempotency key: `refund:ca-pro-rata:<sub.id>:<period_end_iso>`. Stripe
+ * dedupes server-side; a retried webhook delivery hits the same key and
+ * Stripe returns the original Refund object.
+ */
+async function maybeIssueCaliforniaProRataRefund(
+  supabase: Supa,
+  stripe: Stripe,
+  sub: Stripe.Subscription,
+  row: {
+    id: string;
+    current_period_start: string | null;
+    current_period_end: string | null;
+  },
+  tenantId: string,
+): Promise<void> {
+  const periodStart = row.current_period_start
+    ? Date.parse(row.current_period_start)
+    : sub.current_period_start * 1000;
+  const periodEnd = row.current_period_end
+    ? Date.parse(row.current_period_end)
+    : sub.current_period_end * 1000;
+  if (!Number.isFinite(periodStart) || !Number.isFinite(periodEnd)) return;
+  const now = Date.now();
+  if (now >= periodEnd) return; // Cancel at or past period end → no pro-rata.
+  const daysInPeriod = Math.max(
+    1,
+    Math.round((periodEnd - periodStart) / (24 * 60 * 60 * 1000)),
+  );
+  const daysRemaining = Math.max(
+    0,
+    Math.floor((periodEnd - now) / (24 * 60 * 60 * 1000)),
+  );
+  if (daysRemaining <= 0) return;
+
+  // Resolve the most recent paid invoice on this subscription to get the
+  // PaymentIntent + the actual amount paid this period.
+  const latestInvoiceId =
+    typeof sub.latest_invoice === "string"
+      ? sub.latest_invoice
+      : (sub.latest_invoice as { id?: string } | null)?.id ?? null;
+  if (!latestInvoiceId) return;
+
+  let paymentIntentId: string | null = null;
+  let amountPaidCents = 0;
+  try {
+    const invoice = await stripe.invoices.retrieve(latestInvoiceId);
+    paymentIntentId =
+      typeof invoice.payment_intent === "string"
+        ? invoice.payment_intent
+        : (invoice.payment_intent as { id?: string } | null)?.id ?? null;
+    amountPaidCents = invoice.amount_paid ?? 0;
+  } catch {
+    // Invoice retrieve failed — abort pro-rata; Comply gets a paged audit row.
+    await audit(supabase, tenantId, "refund_skipped_invoice_lookup_failed", {
+      stripe_subscription_id: sub.id,
+      latest_invoice_id: latestInvoiceId,
+    });
+    return;
+  }
+  if (!paymentIntentId || amountPaidCents <= 0) return;
+
+  const refundCents = Math.floor((daysRemaining / daysInPeriod) * amountPaidCents);
+  if (refundCents <= 0) return;
+
+  const periodEndIso = new Date(periodEnd).toISOString();
+  const idempotencyKey = `refund:ca-pro-rata:${sub.id}:${periodEndIso}`;
+
+  try {
+    const refund = await stripe.refunds.create(
+      {
+        payment_intent: paymentIntentId,
+        amount: refundCents,
+        reason: "requested_by_customer",
+        metadata: {
+          studiozero_reason: "ca_pro_rata",
+          subscription_id: sub.id,
+          tenant_id: tenantId,
+          days_remaining: String(daysRemaining),
+          days_in_period: String(daysInPeriod),
+        },
+      },
+      { idempotencyKey },
+    );
+    await audit(supabase, tenantId, "refund_issued", {
+      stripe_subscription_id: sub.id,
+      stripe_refund_id: refund.id,
+      stripe_payment_intent_id: paymentIntentId,
+      refund_kind: "ca_pro_rata",
+      refund_cents: refundCents,
+      days_remaining: daysRemaining,
+      days_in_period: daysInPeriod,
+      idempotency_key: idempotencyKey,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "refund_create_failed";
+    await audit(supabase, tenantId, "refund_failed", {
+      stripe_subscription_id: sub.id,
+      stripe_payment_intent_id: paymentIntentId,
+      refund_kind: "ca_pro_rata",
+      refund_cents: refundCents,
+      idempotency_key: idempotencyKey,
+      error: msg,
+    });
+    // Do NOT re-throw — the subscription is canceled, the audit row is the
+    // Comply trail; manual refund follow-up via runbook.
+  }
 }
 
 async function upsertSubscription(

@@ -4,11 +4,14 @@
  * Pricing tier table — client component.
  *
  * Owner: Forge wires structure (M2 Batch 1); Vega owns visual polish at
- * M2 Batch 2 per HC7. The "Start" CTAs POST to /api/billing/checkout-session
- * and redirect the browser to the returned Stripe Checkout URL.
+ * M2 Batch 2 per HC7. The "Start" CTAs now route via the region-aware
+ * `/app/onboarding/checkout?tier=...&period=...` server component (D22
+ * D1+D2 — surfaces the EU/UK waiver checkbox before Stripe Checkout)
+ * instead of POSTing directly to /api/billing/checkout-session.
  *
  * Cross-refs:
  *   - finance/stripe-config.md §1.6 (Checkout Session config)
+ *   - compliance/d22-cooling-off-flow.md §2.1–2.2 (D1+D2 close)
  *   - sprint/milestone-M2.md Vega — Pricing page (HC7)
  */
 
@@ -41,43 +44,22 @@ export function TierTable({ tiers }: TierTableProps): React.ReactElement {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleStart(
+  function handleStart(
     tier: TierSpec["tier"],
     billingPeriod: "monthly" | "annual",
-  ): Promise<void> {
+  ): void {
     setPending(tier);
     setError(null);
     void track("plan_picker_viewed" as never, {
       tier,
       billing_period: billingPeriod,
     } as never);
-    try {
-      const res = await fetch("/api/billing/checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier, billing_period: billingPeriod }),
-      });
-      const data = (await res.json()) as
-        | { checkout_url: string; session_id: string }
-        | { error: string; detail?: string };
-      if (!res.ok) {
-        const msg =
-          "error" in data ? `${data.error}: ${data.detail ?? ""}` : "checkout_failed";
-        setError(msg);
-        setPending(null);
-        return;
-      }
-      if ("checkout_url" in data) {
-        // Hard navigate — Stripe Checkout is full-page hosted.
-        window.location.href = data.checkout_url;
-        return;
-      }
-      setError("no_checkout_url");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "network_error");
-    } finally {
-      setPending(null);
-    }
+    // Route through the region-aware handoff page — it detects EU/UK at
+    // the edge, renders the waiver checkbox if required, then POSTs to
+    // /api/billing/checkout-session with the resolved region + waiver
+    // boolean. D22 D1+D2 close.
+    const params = new URLSearchParams({ tier, period: billingPeriod });
+    window.location.href = `/app/onboarding/checkout?${params.toString()}`;
   }
 
   return (

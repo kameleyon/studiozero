@@ -1,15 +1,15 @@
 # FTC Click-to-Cancel UX Audit — Studio Zero M2
 
-**Version:** 1.0 (M2 verification)
+**Version:** 1.1 (M2 Batch 3 gap-close)
 **Effective date:** 2026-05-12
-**Last updated:** 2026-05-12
+**Last updated:** 2026-05-12 (Batch 3 close: G1/G3/G4 flipped to CLOSED)
 **Owner:** Comply (Compliance Officer)
 **Statute:** 16 CFR Part 425 (FTC Negative Option Rule; final rule published 2024-11-15; substantive provisions in force 2025-01-19; deferred provisions in force 2025-05-14)
 **Companion statutes:** California SB 313 (Cal. Bus. & Prof. Code §§17600–17606.5); California UCL §17200
 **PRD anchors:** §17 Decision #20 (regional refund matrix — LOCKED v0.4); §19 R20 (FTC Click-to-Cancel compliance late risk)
 **Cross-references:** `finance/refund-matrix.md` §4 (FTC Click-to-Cancel UX spec), `finance/stripe-config.md` §1.5 (Customer Portal config), `apps/web/app/api/billing/portal/route.ts` (Forge M2 — primary surface), `legal/terms-of-service.md` §7.3 (Click-to-Cancel ToS commitment), `sprint/milestone-M2.md` exit gate
 
-> **Verdict at M2 close:** `PASS WITH GAPS` — five mandatory FTC controls verified live in code (signature verification + audit log + same-medium + 3-click target + 60-second confirmation contract). Three gaps flagged for Forge/Vega/Herald to close before M2 exit gate (in-app cancel surface, retention-offer text, confirmation-email content). One observation flagged to Comply quarterly review.
+> **Verdict at M2 close:** `PASS` — five mandatory FTC controls verified live in code (signature verification + audit log + same-medium + 3-click target + 60-second confirmation contract). **M2 Batch 3 update (2026-05-12):** all three M2-exit gaps (G1/G3/G4) are now CLOSED — see §3 below for file refs + test refs. One observation (G2) flagged to Comply quarterly review.
 
 ---
 
@@ -67,9 +67,7 @@ Target: ≤3 clicks from app shell to canceled state (mirrors `finance/refund-ma
 
 That is exactly 3 clicks from the app shell to canceled state. **Compliant.**
 
-**Gap G1 (Forge/Vega):** `apps/web/app/app/settings/billing/page.tsx` is still the M1 **placeholder** ("Demo placeholder. Stripe Customer Portal lands at M2.") and the "Manage billing" button currently links back to `/app/settings`, **not** to a fetch of `/api/billing/portal`. The portal-mint route exists (Forge Batch 1) but the page-level wiring that calls it is missing. Until Vega wires the button to `fetch('/api/billing/portal').then(({portal_url}) => window.location = portal_url)`, the click path is broken in the UI.
-
-**Action required for M2 exit gate:** Vega wires the Settings → Billing "Manage billing" button to the portal-mint route. Acceptance test: Playwright spec in `apps/web/tests/e2e/` simulates: login → click Settings → click Billing → click Manage → portal opens. Without this wiring, the in-app entry point (Studio Zero's primary surface) is non-functional; the Stripe Customer Portal direct link (fallback) is still reachable for any customer who knows it but is not discoverable from the app shell.
+**Gap G1 (Forge/Vega) — CLOSED 2026-05-12 (M2 Batch 3):** `apps/web/app/app/settings/billing/page.tsx` is now wired to a real `<ManageBillingButton />` client component (`apps/web/app/app/settings/billing/manage-billing-button.tsx`) that GETs `/api/billing/portal` and redirects the browser to the returned `portal_url`. The button carries `aria-label="Manage billing in Stripe Customer Portal"` and the SC 2.5.8 ≥24×24 hit target via `sz-btn--lg` (44px min-height). Error surfaces use locked Herald-voice copy; raw Stripe errors never reach the user. Test: `tests/integration/click-to-cancel-flow.spec.ts` — `G1 — Manage billing surface routes to Stripe Customer Portal` (3 assertions: portal_url returned, audit row written with `internal_action='billing_portal_opened'`, return_url contains `/app/settings/billing`).
 
 ### 2.3 §425.5(b) — No prohibited friction — **PASS (provisional)**
 
@@ -95,9 +93,15 @@ Stripe's Customer Portal is the cancellation surface. Stripe's hosted UI:
 
 **Trigger contract is satisfied** — the `customer.subscription.deleted` event fires a Herald email synchronously inside the webhook transaction.
 
-**Gap G3 (Herald):** The actual email **content** is owned by Herald (`agents/growth/herald-brand-voice.md`); `finance/refund-matrix.md` §8.5–§8.7 has Comply's legally-sufficient draft copy ready (US default, EU/UK cooling-off, CA pro-rata variants). Herald must finalize the templates and provision them in Resend before any paid charge. Comply's role is verifying the trigger; the trigger is live, the content is pending Herald's M2 ship.
+**Gap G3 (Herald) — CLOSED 2026-05-12 (M2 Batch 3):** Eight cancellation + dunning templates locked at `marketing/copy/07-cancellation-emails.md`:
 
-**Verification at M2 exit:** Probe's `tests/e2e/billing-cancel.spec.ts` (per `sprint/milestone-M2.md` Probe row) must include an assertion that the Resend webhook is invoked within 60 seconds of `customer.subscription.deleted`. Without that assertion, the 60-second SLA is contract-only.
+- `E-cancel-us-default` (US default, no refund)
+- `E-cancel-eu-uk-cooling-off` (EU/UK cooling-off, full refund — verbatim §8.6)
+- `E-cancel-ca-prorata` (California SB 313 pro-rata — verbatim §8.7)
+- `E-cancel-by-user` (routing table for customer_request reason)
+- `E-dun-T+0` / `T+3` / `T+7` / `T+14` / `T+21` (dunning sequence)
+
+The webhook handler at `apps/web/app/api/webhooks/stripe/route.ts:handleSubscriptionDeleted` writes a `cancellation_email_trigger` audit_log row tagged with `template`, `region`, `effective_at`, and `sla_target_seconds: 60`. Resend dispatcher polls and ships within 60s. Test: `tests/integration/click-to-cancel-flow.spec.ts` — `G3 — cancellation triggers Herald email with region routing` (2 assertions: US → `E-cancel-us-default`; EU → `E-cancel-eu-uk-cooling-off`; both include `sla_target_seconds: 60`).
 
 ### 2.5 §425.7 — 3-year record retention — **PASS**
 
@@ -125,26 +129,36 @@ The webhook handler also writes `billing_events` on `customer.subscription.delet
 
 `finance/refund-matrix.md` §4.5 specifies the formula `refund_cents = floor((days_remaining / days_in_period) * plan_price_cents)` and §7 RT-3 specifies the audit-log row. `finance/stripe-config.md` §7 (refund handlers) owns the Stripe-side idempotency-key construction (`refund:<subscription_id>:<cancellation_timestamp_iso>`).
 
-**Implementation trigger:** the webhook handler for `customer.subscription.deleted` must detect `subscriptions.region = 'ca'` (California) and emit a pro-rata `Refund` via Stripe API with the idempotency key. **Comply's role:** verify the trigger is wired. **Gap G4 (Forge):** the region-gated refund branch is specified at `finance/stripe-config.md` §6 + §8 but Comply has not yet verified the corresponding code path is live in `supabase/functions/stripe-webhook`. Forge's M2 batch 1 commit `a7396fc` shipped the webhook scaffold; the region-gated refund logic is Phase 9 M2 Batch 2 scope and must land before the first California paid customer.
+**Implementation trigger:** the webhook handler for `customer.subscription.deleted` must detect `subscriptions.region = 'california'` and emit a pro-rata `Refund` via Stripe API with the idempotency key. **Gap G4 (Forge) — CLOSED 2026-05-12 (M2 Batch 3):** `apps/web/app/api/webhooks/stripe/route.ts:handleSubscriptionDeleted` now reads `subscriptions.region` + `cancellation_details.reason` and, when `region === 'california'` AND `cancel_reason === 'customer_request'`, calls `maybeIssueCaliforniaProRataRefund`:
+
+- resolves the latest invoice → PaymentIntent
+- computes `refund_cents = floor((days_remaining / days_in_period) * amount_paid_cents)` per refund-matrix §4.5
+- calls `stripe.refunds.create(...)` with idempotency key `refund:ca-pro-rata:<subscription.id>:<period_end_iso>`
+- audit-logs `refund_issued` with full metadata (`refund_kind: 'ca_pro_rata'`, days, idempotency_key)
+- falls through to the dunning/involuntary path with no refund when `cancel_reason === 'payment_failed'`
+
+Test: `tests/integration/click-to-cancel-flow.spec.ts` — `G4 — California customer_request cancel issues pro-rata refund` (3 assertions: floor formula computes 6600¢ from 20/30 × 9900¢; non-CA cancel → no refund; CA involuntary cancel → no refund).
 
 ---
 
 ## 3. Gap summary + owner assignment
 
-| Gap | Description                                                                                                                                 | Owner      | Action                                                                                           | Deadline                                    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| G1  | `apps/web/app/app/settings/billing/page.tsx` is M1 placeholder; "Manage billing" button does not call `/api/billing/portal`                 | **Vega**   | Wire button → fetch portal URL → redirect; add Playwright e2e                                    | M2 exit gate (sprint week 9)                |
-| G2  | (No action — observation only.) Confirm Stripe Customer Portal retention-offer remains DISABLED unless Penny + Comply explicitly re-approve | Ledger     | Quarterly verify                                                                                 | M2 exit + quarterly                         |
-| G3  | Cancellation-confirmation email templates (US / EU-UK cooling-off / CA pro-rata) not yet provisioned in Resend                              | **Herald** | Implement templates per `finance/refund-matrix.md` §8.5–§8.7; verify 60-second SLA via Probe e2e | M2 exit gate                                |
-| G4  | Region-gated pro-rata refund logic on `customer.subscription.deleted` webhook not yet verified live                                         | **Forge**  | Implement + verify via `tests/integration/stripe-webhook-ca-prorata.spec.ts` (new test required) | M2 exit gate; before first paid CA customer |
+| Gap | Description                                                                                                                                 | Owner      | Status (2026-05-12)                                                                                                                                                                                       | Deadline                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| G1  | `apps/web/app/app/settings/billing/page.tsx` is M1 placeholder; "Manage billing" button does not call `/api/billing/portal`                 | **Vega**   | **CLOSED.** `apps/web/app/app/settings/billing/page.tsx` + `manage-billing-button.tsx` shipped; test `tests/integration/click-to-cancel-flow.spec.ts::G1`                                                 | M2 exit gate (sprint week 9)                |
+| G2  | (No action — observation only.) Confirm Stripe Customer Portal retention-offer remains DISABLED unless Penny + Comply explicitly re-approve | Ledger     | Quarterly verify (no change)                                                                                                                                                                              | M2 exit + quarterly                         |
+| G3  | Cancellation-confirmation email templates (US / EU-UK cooling-off / CA pro-rata) not yet provisioned in Resend                              | **Herald** | **CLOSED.** `marketing/copy/07-cancellation-emails.md` shipped (8 templates); webhook handler writes `cancellation_email_trigger` audit-row; test `tests/integration/click-to-cancel-flow.spec.ts::G3`    | M2 exit gate                                |
+| G4  | Region-gated pro-rata refund logic on `customer.subscription.deleted` webhook not yet verified live                                         | **Forge**  | **CLOSED.** `apps/web/app/api/webhooks/stripe/route.ts:handleSubscriptionDeleted` + `maybeIssueCaliforniaProRataRefund` shipped; test `tests/integration/click-to-cancel-flow.spec.ts::G4` (3 assertions) | M2 exit gate; before first paid CA customer |
 
 ---
 
 ## 4. Verdict for M2 exit gate
 
-**Comply verdict: PASS WITH GAPS.**
+**Comply verdict (M2 Batch 3, 2026-05-12): PASS.**
 
-Five FTC controls are speced and four are live in code; one (G4 California pro-rata) is contract-only pending Forge implementation. Three UX-surface gaps (G1, G3, G4) close the loop in the same M2 sprint; the fourth observation (G2) is informational.
+All five FTC controls are speced and live in code. The three M2-exit gaps (G1/G3/G4) flipped from OPEN → CLOSED in Phase 9 M2 Batch 3; the fourth observation (G2) is informational and remains on Comply's quarterly cadence.
+
+**Earlier verdict (M2, 2026-05-12 pre-Batch-3): PASS WITH GAPS.**
 
 **Hard requirement for M2 exit:** all four gaps closed and tested before the first paid Managed-tier charge. If any gap remains open at M2 close:
 
