@@ -1,0 +1,255 @@
+# ============================================================================
+# sentry-alerts.yaml — Studio Zero Sentry alert rules
+# ============================================================================
+# Owner: Watch (M4 Batch 1). Reviewers: Cipher (no PII in alert payloads —
+#   Sentry's beforeSend already scrubs, but this file MUST NOT introduce new
+#   leak paths via custom alert templates), BigBrain (P1 paging policy).
+#
+# This file is the source-of-truth for Watch's alert rulesets. The shape is
+# Sentry-API-friendly (matches the /api/0/projects/{org}/{project}/rules/
+# POST payload after a YAML-to-JSON pass). Terraform-style "make it so"
+# wiring lands at M5 — for now, Watch applies these rules manually via the
+# Sentry UI; this YAML is the auditable record + the M5 ingestor target.
+#
+# CRITICAL: every alert action MUST omit PII. Sentry has its own
+# scrubbing (`beforeSend` per sentry.md §"PII scrub config") so the issue
+# bodies are already redacted; the alert ACTION templates here use only
+# Sentry-native variables (no $email, no $user_id) — see "templates" key.
+#
+# Cross-refs:
+#   architecture/iac/observability/sentry.md       (project ids + scrub config)
+#   operations/oncall-rotation.md                  (who gets the page)
+#   operations/runbook-day-zero.md                 (how to respond)
+#   sprint/milestone-M4.md                         (status page + alerts exit gate)
+#   PRD §13.6                                      (observability requirements)
+# ============================================================================
+
+org: studio-zero
+projects:
+  - studio-zero-web
+  - studio-zero-runner
+
+# ----------------------------------------------------------------------------
+# Severity vocabulary (lowercase to match Sentry conventions)
+# ----------------------------------------------------------------------------
+# P1 — page; primary on-call gets email immediately. SLA: 15-min ack.
+# P2 — notify; primary on-call gets email; SLA: 1-hour triage.
+# P3 — informational; weekly digest. No paging.
+# ----------------------------------------------------------------------------
+
+defaults:
+  environments:
+    - production
+    - runner-production
+  # All alerts honor Sentry's beforeSend scrubbing — that's project-level
+  # config in sentry.md, not per-rule. This block is reminder + future hook.
+  scrubbing:
+    enforce_beforeSend: true
+    deny_pii_in_template: true
+
+rules:
+  # ==========================================================================
+  # P1 — pages
+  # ==========================================================================
+
+  - id: production_error_rate_burst
+    severity: P1
+    title: "Error rate > 1% / hr in production"
+    description: >
+      Aggregate error rate across the studio-zero-web project exceeds 1%
+      of request volume in any rolling 60-minute window. Indicates a
+      regression, a dependency failure, or an attack.
+    when:
+      type: metric_alert
+      metric: error_rate
+      aggregate: percent_of_event_count
+      threshold: 1.0 # 1.0% of events
+      window_minutes: 60
+      comparison: ">"
+    filters:
+      environment: production
+      level: ">= error"
+    actions:
+      - type: email
+        target_type: rotation
+        target: oncall-primary
+        template: "P1 page — see runbook-day-zero.md → 'Spike of 500s'"
+      - type: status_page_post
+        provider: better_uptime
+        message: "We are investigating elevated error rates."
+
+  - id: new_error_in_60min
+    severity: P1
+    title: "Net-new error class in last 60 min"
+    description: >
+      Sentry's "first seen" detection: an issue with first_seen within
+      the last 60 minutes AND event count > 5. Catches regressions
+      shipped via a deploy where the bug pattern has never been seen
+      before.
+    when:
+      type: issue_alert
+      condition: first_seen_event
+      frequency_threshold: 5 # at least 5 events of this issue
+      window_minutes: 60
+    filters:
+      environment: production
+      level: ">= error"
+    actions:
+      - type: email
+        target_type: rotation
+        target: oncall-primary
+        template: "P1 page — net-new error class. Sentry: $issue_url"
+
+  - id: runner_failed_terminal_burst
+    severity: P1
+    title: "Runner pool: > 5 failed_terminal in 10 min"
+    description: >
+      Sentinel event emitted by apps/runner when a run transitions to
+      failed_terminal. > 5 in 10 minutes suggests a systemic failure
+      (LLM gateway down, Vault decrypt failure, runner image regression).
+    when:
+      type: issue_alert
+      event_type: "runner.run.failed_terminal"
+      frequency_threshold: 5
+      window_minutes: 10
+    filters:
+      environment: runner-production
+    actions:
+      - type: email
+        target_type: rotation
+        target: oncall-primary
+        template: "P1 page — runner pool degraded. Check Railway + Vault."
+
+  - id: stripe_webhook_signature_failure_burst
+    severity: P1
+    title: "Stripe webhook signature failures > 3 in 5 min"
+    description: >
+      /api/webhooks/stripe rejected > 3 signature-verification attempts
+      in 5 minutes. Either a credential rotation went wrong, an attacker
+      is probing, or Stripe rotated their signing secret without notice.
+    when:
+      type: issue_alert
+      event_type: "stripe.webhook.signature_failed"
+      frequency_threshold: 3
+      window_minutes: 5
+    filters:
+      environment: production
+    actions:
+      - type: email
+        target_type: rotation
+        target: oncall-primary
+        template: "P1 page — Stripe webhook signature failing. See runbook."
+
+  # ==========================================================================
+  # P2 — notify (1-hour triage SLA)
+  # ==========================================================================
+
+  - id: performance_regression_50pct
+    severity: P2
+    title: "p95 latency regression > 50% vs 7-day baseline"
+    description: >
+      Sentry Performance: any transaction's p95 latency over the last
+      hour exceeds the 7-day baseline by > 50%. Catches the slow-build
+      regression that won't show as an error but degrades UX.
+    when:
+      type: metric_alert
+      metric: transaction_duration_p95
+      aggregate: ratio_to_baseline
+      threshold: 1.5
+      window_minutes: 60
+      baseline_window_days: 7
+      comparison: ">"
+    filters:
+      environment: production
+      transaction:
+        include:
+          - "/api/runs"
+          - "/api/runs/[runId]"
+          - "/api/runs/[runId]/findings"
+          - "/api/billing/checkout-session"
+    actions:
+      - type: email
+        target_type: rotation
+        target: oncall-primary
+        template: "P2 — perf regression. Sentry Performance: $transaction"
+
+  - id: resend_bounce_rate_spike
+    severity: P2
+    title: "Resend bounce rate > 2% rolling 1h"
+    description: >
+      Aggregated from email_events.delivery_status = 'bounced' over the
+      last hour. > 2% triggers Comply review (CASL / CAN-SPAM exposure).
+      This rule is a SENTINEL event we emit from the Resend webhook
+      handler, not a Sentry-native metric — the alert fires on a
+      custom event of type `email.bounce_rate_high`.
+    when:
+      type: issue_alert
+      event_type: "email.bounce_rate_high"
+      frequency_threshold: 1
+      window_minutes: 60
+    filters:
+      environment: production
+    actions:
+      - type: email
+        target_type: rotation
+        target: oncall-primary
+        template: "P2 — email bounce-rate spike. Pause non-transactional sends."
+
+  - id: realtime_disconnect_spike
+    severity: P2
+    title: "Realtime channel disconnect rate > 10% in 15 min"
+    description: >
+      Sentinel event from apps/web Realtime subscription error handlers.
+      Spike indicates Supabase Realtime degradation or a network issue
+      affecting a region.
+    when:
+      type: issue_alert
+      event_type: "realtime.channel.disconnect"
+      frequency_threshold: 25 # absolute count, not %, to keep the rule simple
+      window_minutes: 15
+    filters:
+      environment: production
+    actions:
+      - type: email
+        target_type: rotation
+        target: oncall-primary
+        template: "P2 — Realtime disconnect spike. Check Supabase status."
+
+  # ==========================================================================
+  # P3 — informational (weekly digest)
+  # ==========================================================================
+
+  - id: weekly_error_digest
+    severity: P3
+    title: "Weekly error digest"
+    description: >
+      Top-10 issues by event count over the last 7 days, grouped by
+      transaction and tenant. Sent Mondays 09:00 ET.
+    when:
+      type: scheduled
+      cron: "0 9 * * 1" # Mondays 09:00 (Sentry uses UTC; ET conversion at apply time)
+    actions:
+      - type: email
+        target_type: rotation
+        target: oncall-primary
+        template: "Weekly digest — see attached top-10 list. No action required."
+# ============================================================================
+# Notes
+# ============================================================================
+# - Sentry-native action types as of M4: `email`, `slack`, `pagerduty`,
+#   `microsoft_teams`, `discord`. We use `email` only at M4 (cost). M5 swaps
+#   primary-on-call email to PagerDuty if rotation grows beyond 1 person.
+# - `status_page_post` is NOT a Sentry-native action — at M4 it is documented
+#   intent for the M5 Better Uptime integration (Watch authors the bridge
+#   webhook). Until then, the on-call manually posts the incident.
+# - Frequency thresholds are tuned for M0-M4 traffic volumes (low). Watch
+#   revisits at M5 launch +30 days using actual production rates.
+# - All `event_type` values listed under custom rules MUST be emitted by
+#   our code via `Sentry.captureMessage` or `Sentry.captureEvent` with the
+#   matching `type` tag. The runner emits `runner.run.failed_terminal`
+#   from apps/runner/src/run-state-machine.ts on terminal failure; the
+#   Stripe webhook emits `stripe.webhook.signature_failed` from
+#   apps/web/app/api/webhooks/stripe/route.ts after sig verify failure;
+#   the Resend webhook emits `email.bounce_rate_high` from a 1-hour
+#   aggregation worker authored at M4 Batch 2 (Forge).
+# ============================================================================

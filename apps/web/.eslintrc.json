@@ -87,6 +87,7 @@
         "app/api/runs/route.{ts,tsx}",
         "app/api/billing/**/route.{ts,tsx}",
         "app/api/cli/**/route.{ts,tsx}",
+        "app/api/healthz/**/route.{ts,tsx}",
         "app/auth/callback/route.{ts,tsx}",
         "instrumentation.ts",
         "lib/cli-auth.ts",

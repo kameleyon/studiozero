@@ -47,6 +47,19 @@ export interface GatewayMessageRequest {
   maxTokens?: number;
   /** Model class — gateway maps to an exact model id. */
   modelClass?: "fast" | "thoughtful" | "long-context";
+  /**
+   * W3C traceparent value (M4 Watch — Sentry trace-id propagation).
+   *
+   * The runner receives the trace-id from the runner-JWT mint endpoint
+   * (which captured it from the originating web request) or from the
+   * pg-boss job payload. When present, the value is forwarded to the
+   * gateway as a `traceparent` header so the LLM call shows up in the
+   * same Sentry trace as the web → mint → dispatch chain.
+   *
+   * Format validation lives in apps/web/lib/trace-id.ts — by the time
+   * a value reaches this client it has already been parsed/validated.
+   */
+  traceparent?: string;
 }
 
 export interface GatewayMessageResponse {
@@ -89,13 +102,22 @@ class RealGatewayClient implements LlmGatewayClient {
     signal: AbortSignal,
   ): Promise<GatewayMessageResponse> {
     const token = this.refresher.getToken().token;
+    // M4 Watch — forward the W3C traceparent so the LLM call is part of
+    // the same Sentry distributed trace as the originating web request.
+    // The value is validated upstream (apps/web/lib/trace-id.ts:
+    // parseTraceparent) before it ever reaches the runner, so we only
+    // need to gate on its presence here.
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      "X-AI-Generated": "studio-zero",
+    };
+    if (req.traceparent) {
+      headers.traceparent = req.traceparent;
+    }
     const res = await fetch(this.url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        "X-AI-Generated": "studio-zero",
-      },
+      headers,
       body: JSON.stringify(req),
       signal,
       // We do NOT follow redirects automatically — see redirect-chain
