@@ -1,0 +1,12 @@
+Contact: mailto:security@studiozero.dev
+Contact: https://studiozero.dev/security
+Expires: 2027-05-12T23:59:59Z
+Acknowledgments: https://studiozero.dev/security#hall-of-fame
+Preferred-Languages: en
+Canonical: https://studiozero.dev/.well-known/security.txt
+Policy: https://studiozero.dev/security
+Hiring: https://studiozero.dev/about
+
+# Studio Zero security disclosure policy — see /security for the full policy.
+# RFC 9116 conformance. Re-issued on each Expires rollover (annual).
+# Owner: Comply (Compliance Officer). Co-signed: Cipher + Shield.
