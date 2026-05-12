@@ -13,6 +13,7 @@ dist/
 build/
 .cache/
 .next/
+coverage/
 
 # apps/web — Next.js build outputs
 apps/web/.next/
