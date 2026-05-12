@@ -1,61 +1,35 @@
 import * as React from "react";
 
-import { StubPage } from "../../components/StubPage";
+import { LegalPage } from "../../components/LegalPage";
 
 import type { Metadata } from "next";
 
 /**
- * /subprocessors — Subprocessor list stub.
+ * /subprocessors — Subprocessor list (M1 first publication).
  *
- * Locked decision #17: GDPR Article 28 DPA + subprocessor list ships
- * before the first Managed-tier customer at M2. M0 stub names the
- * known shape so the legal surface is honest.
+ * Phase 9 M1 Batch 3 (Comply). Pulled forward from the M3 stub. Source-
+ * of-truth Markdown lives at `legal/subprocessors.md`. 13 entries
+ * (10 core + 3 conditional). Mirrors every external service in
+ * `architecture/system-diagram.md`. 30-day change-notification window
+ * per Decision #17.
  */
 
 export const metadata: Metadata = {
   title: "Subprocessors",
   description:
-    "Studio Zero's subprocessor list. Ships at M2 with the DPA template.",
+    "The 13 third-party vendors that touch your data when you use Studio Zero, with purpose, region, data category, and DPA links.",
 };
+
+export const dynamic = "force-static";
 
 export default function SubprocessorsPage(): React.ReactElement {
   return (
-    <StubPage
+    <LegalPage
       eyebrow="Legal · Subprocessors"
-      title="The vendors that touch your data."
-      description="A full subprocessor list with purpose, region, and data category ships at M2 alongside the Article 28 DPA template. Below is the known shape."
-      shipsAt="M2"
-      owner="Comply"
-    >
-      <p>The known shape at M0:</p>
-      <ul>
-        <li>
-          <strong>Vercel</strong> — application hosting and CDN (US iad1
-          region).
-        </li>
-        <li>
-          <strong>Supabase</strong> — Postgres database, authentication, edge
-          functions (US East 1).
-        </li>
-        <li>
-          <strong>Anthropic</strong> — large language model inference for the
-          audit runner.
-        </li>
-        <li>
-          <strong>Stripe</strong> — billing and payment processing (M2).
-        </li>
-        <li>
-          <strong>Resend</strong> — transactional email (M2).
-        </li>
-        <li>
-          <strong>GitHub</strong> — source repository access via the Studio
-          Zero GitHub App (M1).
-        </li>
-      </ul>
-      <p>
-        Studio Zero commits to a 30-day change-notification window for any
-        subprocessor addition per decision #17.
-      </p>
-    </StubPage>
+      title="Subprocessors"
+      source="legal/subprocessors.md"
+      effectiveDate="2026-05-12"
+      version="1.0"
+    />
   );
 }
