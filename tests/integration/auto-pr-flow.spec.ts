@@ -132,7 +132,9 @@ describe("Auto-PR happy path — build → re-audit PASS → PR open", () => {
   it("locked Art. 50 disclosure is present in every PR body", () => {
     // Snapshot guard — changing this string requires a Comply-signed
     // PR + a matching update to auto-pr-art50-disclosure.spec.ts.
-    expect(ART50_DISCLOSURE).toContain("EU AI Act Article 50");
+    // V2.1 Batch 1 (Forge VF1 carry close) — the locked verbatim text now
+    // matches legal/pr-body-template.md §2 exactly.
+    expect(ART50_DISCLOSURE).toContain("AI Act Art. 50 Disclosure:");
     expect(ART50_DISCLOSURE).toContain("AI-Authored");
     expect(ART50_DISCLOSURE).toContain("Refs: F-NNN");
   });

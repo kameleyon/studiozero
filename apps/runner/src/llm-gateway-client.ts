@@ -25,8 +25,91 @@
  *     client construction time AND on every redirect-hop
  *   - the underlying fetch is AbortSignal-aware (per-run cancel)
  */
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve as resolvePath } from "node:path";
+
 import { assertSafeUrl } from "./ssrf-guard.js";
 import type { TokenRefresher } from "./jwt-refresh.js";
+
+/* -------------------------------------------------------------------- */
+/* Pinned-versions registry (R16 mitigation, V1.5 VF3 carry close)       */
+/* -------------------------------------------------------------------- */
+/*
+ * `apps/runner/src/llm/pinned-versions.json` is the canonical pin registry
+ * referenced by `architecture/test-strategy.md` + sprint/milestone-M1.md +
+ * `tests/integration/cross-mode-consistency.spec.ts`. The runner loads it on
+ * import and asserts the resolved modelClass corresponds to a known pin.
+ *
+ * The gateway is the trust boundary that maps modelClass → concrete model
+ * id; the registry on the runner side ensures the runner NEVER sends a
+ * request without a pinned class. If a future caller passes a modelClass
+ * not present in the registry, we throw at request-time — fail fast.
+ *
+ * Cipher v0.5: the file is loaded synchronously at module-init; this is
+ * safe in the worker (one-time cost) and required so contract tests can
+ * fail at import-time when the file drifts.
+ */
+export interface PinnedVersions {
+  version: string;
+  pinned_at: string;
+  anthropic: { models: { primary: string; fast: string } };
+  fallback_provider: string;
+  openrouter?: { models: { primary: string; fast: string } };
+  rotation_policy: string;
+}
+
+let cachedPins: PinnedVersions | null = null;
+
+/** Read the pinned-versions.json sidecar relative to this module. */
+export function loadPinnedVersions(): PinnedVersions {
+  if (cachedPins) return cachedPins;
+  const here = dirname(fileURLToPath(import.meta.url));
+  const path = resolvePath(here, "./llm/pinned-versions.json");
+  const txt = readFileSync(path, "utf-8");
+  const parsed = JSON.parse(txt) as PinnedVersions;
+  if (
+    !parsed ||
+    parsed.version !== "v1" ||
+    !parsed.anthropic?.models?.primary ||
+    !parsed.anthropic?.models?.fast
+  ) {
+    throw new Error(
+      "[runner] pinned-versions.json missing required anthropic.models.{primary,fast}",
+    );
+  }
+  cachedPins = parsed;
+  return parsed;
+}
+
+/** Map a modelClass to the pinned concrete model id, by provider.
+ *  Default provider is Anthropic; if `fallback=true` we use OpenRouter
+ *  (R9 dual-provider lane).
+ *  Throws when the class is not "fast" / "thoughtful" / "long-context".
+ *  "thoughtful" and "long-context" both map to the "primary" pin per
+ *  the gateway's modelClass contract. */
+export function resolvePinnedModel(
+  modelClass: "fast" | "thoughtful" | "long-context",
+  opts?: { fallback?: boolean },
+): string {
+  const pins = loadPinnedVersions();
+  const models =
+    opts?.fallback && pins.openrouter
+      ? pins.openrouter.models
+      : pins.anthropic.models;
+  if (modelClass === "fast") return models.fast;
+  if (modelClass === "thoughtful" || modelClass === "long-context") {
+    return models.primary;
+  }
+  throw new Error(
+    `[runner] resolvePinnedModel: unknown modelClass '${modelClass as string}'`,
+  );
+}
+
+/** Test-only reset of the module-level cache. */
+export function _resetPinnedVersionsCache(): void {
+  cachedPins = null;
+}
 
 /** Shape of an LLM call request — minimal at M1; expands at M1+1. */
 export interface GatewayMessageRequest {
@@ -95,6 +178,11 @@ class RealGatewayClient implements LlmGatewayClient {
   constructor(opts: { gatewayUrl: string; refresher: TokenRefresher }) {
     this.url = assertSafeUrl(opts.gatewayUrl);
     this.refresher = opts.refresher;
+    // VF3 carry close — assert the pinned-versions registry is loadable
+    // at client construction time. Any drift (missing file, malformed
+    // JSON, missing primary/fast keys) explodes here instead of in the
+    // middle of a build run.
+    loadPinnedVersions();
   }
 
   async message(
@@ -115,10 +203,14 @@ class RealGatewayClient implements LlmGatewayClient {
     if (req.traceparent) {
       headers.traceparent = req.traceparent;
     }
+    // VF3 — attach the pinned model id so the gateway can compare against
+    // its own pin registry and reject if the runner is mis-pinned.
+    const pinnedModel = resolvePinnedModel(req.modelClass ?? "fast");
+    const bodyWithPin = { ...req, pinned_model: pinnedModel };
     const res = await fetch(this.url, {
       method: "POST",
       headers,
-      body: JSON.stringify(req),
+      body: JSON.stringify(bodyWithPin),
       signal,
       // We do NOT follow redirects automatically — see redirect-chain
       // commentary in ssrf-guard.ts. If the gateway redirects, that's

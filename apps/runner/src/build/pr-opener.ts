@@ -39,15 +39,22 @@ import { assertSafeUrl } from "../ssrf-guard.js";
  * forbids. To change this string you MUST land a Comply-signed PR
  * and update `tests/integration/auto-pr-art50-disclosure.spec.ts` in
  * the same commit.
+ *
+ * V2.1 Batch 1 (Forge) — VF1 carry close. The previous draft mixed Comply's
+ * "Art. 50 disclosure" prose with Herald's commit-trailer narration. Comply
+ * re-locked the §2 paragraph in `legal/pr-body-template.md`; this constant is
+ * now substituted with the VERBATIM source from §2 plus the bracketed tokens
+ * the opener substitutes at render time, then re-wrapped (no rewrite) into
+ * the PR-body opening "Studio Zero — N fix recommendation(s)" envelope that
+ * §1 of the same doc defines.
+ *
+ * LOCKED by Comply at legal/pr-body-template.md §2 — do NOT modify without
+ * Comply sign-off (re-verified on the quarterly System Card cadence).
  */
-export const ART50_DISCLOSURE = `> **AI-generated content disclosure (EU AI Act Article 50 / California SB 942).**
-> This pull request was authored by Studio Zero's automated build agents
-> running on top of Anthropic Claude models. Each commit carries an
-> \`AI-Authored: studio-zero/runner@<version>\` trailer and a \`Refs: F-NNN\`
-> trailer pointing to the originating audit finding. The proposed
-> changes were re-audited by Jury before this PR opened — see the
-> "Re-audit" section below. AI-generated changes are advisory; you
-> remain the author of record. Full system card: <https://studiozero.dev/system-card>.`;
+// LOCKED by Comply at legal/pr-body-template.md §2 — do NOT modify without Comply sign-off
+export const ART50_DISCLOSURE = `**AI Act Art. 50 Disclosure:** This pull request was authored by an AI system (Studio Zero v<system_card_version>) on behalf of <tenant_name>. All code changes are AI-generated and have been pre-verified by Studio Zero's independent audit panel (Jury + 6 reviewers) before this PR was opened. Customer review and approval is required before merge. See https://studiozero.dev/system-card for the AI System Card.
+
+**Auto-PR provenance:** Each commit in this PR carries an \`AI-Authored: studio-zero/runner@v<runner_version>\` trailer and a \`Refs: F-NNN\` trailer pointing to the originating audit finding. California SB 942 machine-readable provenance is satisfied by the same trailer (see legal/ai-system-card for the full disclosure cycle).`;
 
 /** Default-branch fuzz reject list. Mirrors the Shield corpus at
  *  `runner/fixtures/default-branch-fuzz-corpus/`. Case-insensitive +

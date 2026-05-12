@@ -10,14 +10,68 @@ import type { NextConfig } from "next";
  * every response (API + page) carries `X-AI-Generated: studio-zero`.
  * Disclosure binds 2026-08-02 — we ship the header at M0, not M5.
  *
- * Security headers per Shield's threat model defaults (TB-1..TB-15).
- * Fuller CSP, HSTS preload, and per-route variants land at M1 with the
- * runner endpoints; this is the floor every page meets today.
+ * V2.1 Batch 1 (Forge — M5 CSP+HSTS carry close). The CSP allows-only the
+ * third-party origins the customer-facing site genuinely needs:
+ *   - https://cdn.stripe.com + https://js.stripe.com (Checkout + Portal)
+ *   - https://js.posthog.com + https://eu.i.posthog.com (Lens / Hook funnel)
+ *   - https://browser.sentry-cdn.com (Sentry replay loader)
+ *
+ * The list is intentionally short — Shield's threat-model.md TB-1 ("XSS via
+ * third-party origin allowlist drift") + Cipher's redaction posture both ban
+ * `script-src *` and `script-src 'unsafe-eval'`. Adding a new origin requires
+ * a Cipher-signed PR.
+ *
+ * HSTS includes-subDomains + preload — Studio Zero is on the HSTS preload
+ * list (per architecture/iac/cloudflare/dns.md). The 1-year max-age matches
+ * the preload registry minimum.
  */
+
+/** Content Security Policy — Shield + Cipher gate. */
+const CSP_DIRECTIVES = [
+  // Default sources — locked to same-origin.
+  "default-src 'self'",
+  // Scripts — Stripe + PostHog + Sentry loaders. 'unsafe-inline' is the
+  // pragmatic concession Next.js requires for App Router server components
+  // until Next 16 ships `next/script` strict-dynamic. Tracked under
+  // architecture/decisions.md ARCH-D11 (CSP hardening roadmap).
+  "script-src 'self' 'unsafe-inline' https://cdn.stripe.com https://js.stripe.com https://js.posthog.com https://browser.sentry-cdn.com",
+  // Styles — Tailwind atomic classes + inline style attrs on Stripe iframes.
+  "style-src 'self' 'unsafe-inline'",
+  // Images — same-origin + Supabase storage + Stripe + data: URIs.
+  "img-src 'self' data: blob: https://*.supabase.co https://q.stripe.com https://*.studiozero.dev",
+  // Fonts — same-origin (Geist Sans + Geist Mono ship as static assets).
+  "font-src 'self' data:",
+  // Network connectivity — Supabase Realtime (wss) + Stripe + PostHog + Sentry.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://*.posthog.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io",
+  // Frames — Stripe Checkout iframes only.
+  "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://checkout.stripe.com",
+  // Form actions — local only.
+  "form-action 'self'",
+  // Browsing context — never embed Studio Zero in a third-party iframe.
+  "frame-ancestors 'none'",
+  // Base URI — pin to same-origin (Shield TB-3 base-tag injection).
+  "base-uri 'self'",
+  // Object embeds — block.
+  "object-src 'none'",
+  // Upgrade insecure requests in case any third-party HTTP URL slips in.
+  "upgrade-insecure-requests",
+];
+
 const securityHeaders = [
   // EU AI Act Art. 50 interim machinery — PRD §11.3 + §14.5.
   // Comply + Forge ticket #18. Comply re-verifies before V1.5 Auto-PR.
   { key: "X-AI-Generated", value: "studio-zero" },
+
+  // Content Security Policy — V2.1 Batch 1 carry close (M5 CSP).
+  // Shield TB-1 + Cipher redaction posture.
+  { key: "Content-Security-Policy", value: CSP_DIRECTIVES.join("; ") },
+
+  // HSTS preload — V2.1 Batch 1 carry close (M5 HSTS).
+  // 1-year max-age + includeSubDomains + preload.
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=31536000; includeSubDomains; preload",
+  },
 
   // Standard hardening — Shield's M0 floor.
   { key: "X-Content-Type-Options", value: "nosniff" },

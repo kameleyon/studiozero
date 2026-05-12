@@ -1,0 +1,18 @@
+{
+  "version": "v1",
+  "pinned_at": "2026-05-12",
+  "anthropic": {
+    "models": {
+      "primary": "claude-sonnet-4-6",
+      "fast": "claude-haiku-4-5-20251001"
+    }
+  },
+  "fallback_provider": "openrouter",
+  "openrouter": {
+    "models": {
+      "primary": "anthropic/claude-sonnet-4.6",
+      "fast": "anthropic/claude-haiku-4.5"
+    }
+  },
+  "rotation_policy": "Forge reviews pinned versions monthly; major version bumps require Verify cross-mode-consistency re-run + 7d soak in staging"
+}

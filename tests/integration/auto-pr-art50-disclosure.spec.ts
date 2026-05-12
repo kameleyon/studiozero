@@ -9,6 +9,19 @@
  *
  * V1.5 exit gate: "AI System Card v1.0 published at /system-card; Comply
  * sign-off; Art. 50 disclosure paragraph in every PR body (snapshot test)."
+ *
+ * V2.1 Batch 1 update (Forge — VF1 carry close): the disclosure text is now
+ * the VERBATIM source from `legal/pr-body-template.md` §2 (Comply-locked).
+ * The four substantive bindings called out there are:
+ *
+ *   1. "AI system (Studio Zero v<system_card_version>)" — system name + version
+ *   2. "All code changes are AI-generated" — synthetic-content marking
+ *   3. "pre-verified by Studio Zero's independent audit panel (Jury + 6
+ *       reviewers) before this PR was opened" — internal QA gate
+ *   4. "Customer review and approval is required before merge" — human oversight
+ *
+ * This spec verifies all four bindings + the SB 942 provenance trailer + the
+ * System Card URL render verbatim. Any drift requires a Comply-signed PR.
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -17,15 +30,35 @@ import {
   formatPrBody,
 } from "../../apps/runner/src/build/pr-opener.js";
 
-describe("Art. 50 disclosure is locked text + present in every PR body", () => {
-  it("ART50_DISCLOSURE contains required AI Act / SB 942 markers", () => {
-    expect(ART50_DISCLOSURE).toContain("EU AI Act Article 50");
-    expect(ART50_DISCLOSURE).toContain("California SB 942");
-    expect(ART50_DISCLOSURE).toContain("AI-Authored");
+/** The four locked-verbatim bindings from legal/pr-body-template.md §2. */
+const LOCKED_ART50_BINDINGS = [
+  // Binding 1 — names the AI system + version.
+  "AI Act Art. 50 Disclosure:",
+  "AI system (Studio Zero v<system_card_version>)",
+  "on behalf of <tenant_name>",
+  // Binding 2 — synthetic-content marking.
+  "All code changes are AI-generated",
+  // Binding 3 — internal QA gate disclosure.
+  "pre-verified by Studio Zero's independent audit panel (Jury + 6 reviewers) before this PR was opened",
+  // Binding 4 — human oversight gate.
+  "Customer review and approval is required before merge",
+  // System Card link cycle.
+  "https://studiozero.dev/system-card",
+];
+
+describe("Art. 50 disclosure is locked verbatim text + present in every PR body", () => {
+  it("ART50_DISCLOSURE contains every locked binding from legal/pr-body-template.md §2", () => {
+    for (const binding of LOCKED_ART50_BINDINGS) {
+      expect(ART50_DISCLOSURE).toContain(binding);
+    }
+  });
+
+  it("ART50_DISCLOSURE additionally carries the SB 942 provenance trailer marker", () => {
+    // The auto-PR-provenance paragraph is the §1-template envelope.
+    // It carries the AI-Authored: + Refs: F-NNN trailer spec from §3.
+    expect(ART50_DISCLOSURE).toContain("AI-Authored: studio-zero/runner@v<runner_version>");
     expect(ART50_DISCLOSURE).toContain("Refs: F-NNN");
-    expect(ART50_DISCLOSURE).toContain(
-      "https://studiozero.dev/system-card",
-    );
+    expect(ART50_DISCLOSURE).toContain("California SB 942");
   });
 
   it("PR body opens with the disclosure paragraph (verbatim, no rewrites)", () => {

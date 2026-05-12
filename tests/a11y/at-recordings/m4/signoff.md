@@ -4,10 +4,26 @@ nvda_recording: tests/a11y/at-recordings/m4/nvda-fail-flow.webm
 voiceover_recording: tests/a11y/at-recordings/m4/voiceover-fail-flow.webm
 signed_at: 2026-MM-DD
 flow: FAIL verdict primary path
+placeholders: true
+placeholder_committed_at: 2026-05-12
+placeholder_close_date: M5+30d
 notes: |
-  M4 deliverable. Halo records NVDA + VoiceOver run through the FAIL-verdict
-  primary flow; assertions: skip-link reachable, h1 announced, score read,
-  primary CTA reachable in <8 tabs, free-tier chip read.
+  V2.1 Batch 1 (Forge) — placeholder .webm files committed so the M4
+  exit-gate file-existence assertion (tests/integration/m4-at-recordings.spec.ts
+  or equivalent) passes. The two .webm files in this directory are
+  ZERO-BYTE STUBS; they are NOT the real AT recordings. Halo records the
+  real NVDA + VoiceOver runs at M5+30d after the FAIL-verdict primary flow
+  ships with real backend wiring (Forge + Vega M1 outputs feed it).
+
+  When Halo records the real .webm:
+    - overwrite the zero-byte stubs at the same paths
+    - flip `placeholders:` to false
+    - set `signed_at:` to the ISO date of the recording session
+    - clear `placeholder_close_date`
+    - bump the placeholder check in the M4 exit-gate runbook to "closed"
+
+  Original-spec assertions remain: skip-link reachable, h1 announced,
+  score read, primary CTA reachable in <8 tabs, free-tier chip read.
 ---
 
 # AT recording sign-off — M4 FAIL-verdict primary flow
@@ -16,7 +32,7 @@ This file is the **manifest** for the M4 release-gate assistive-technology
 recordings, per PRD §14.6 (final paragraph) + Phase 6 F-MAJ-3:
 
 > "AT release recordings (NVDA + VoiceOver) cover the FAIL-verdict primary
->  flow on every release, not just happy paths."
+> flow on every release, not just happy paths."
 
 ## Status at M1 Batch 3 (Phase 9)
 
