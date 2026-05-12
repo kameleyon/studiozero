@@ -43,7 +43,25 @@
       }
     ],
     "import/no-default-export": "off",
-    "import/no-unresolved": "error"
+    "import/no-unresolved": "error",
+
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": [
+              "**/lib/supabase-service",
+              "**/lib/supabase-service.ts",
+              "../lib/supabase-service",
+              "./supabase-service",
+              "@/lib/supabase-service"
+            ],
+            "message": "supabase-service.ts holds the Supabase service-role key and bypasses RLS. It MUST only be imported by app/api/webhooks/** and other server-only Route Handlers — never by client components, Server Components rendered to the browser, or modules that ship to the client bundle. See lib/supabase-service.ts for the boundary policy."
+          }
+        ]
+      }
+    ]
   },
   "overrides": [
     {
@@ -60,6 +78,19 @@
       ],
       "rules": {
         "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": [
+        "app/api/webhooks/**/route.{ts,tsx}",
+        "app/api/admin/**/route.{ts,tsx}",
+        "app/api/runs/route.{ts,tsx}",
+        "app/auth/callback/route.{ts,tsx}",
+        "instrumentation.ts",
+        "lib/supabase-service.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
       }
     }
   ],

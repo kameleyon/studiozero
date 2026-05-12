@@ -1,11 +1,14 @@
 "use client";
 
 /**
- * /login — Phase 9 M1 starter (MOCK).
+ * /login — Phase 9 M1 Batch 2 (Forge — real Supabase Auth).
  *
- * Mirrors /signup minimal — same /api/signup endpoint sets the mock
- * cookie; M1+1 splits into Supabase `signInWithPassword` and proper
- * error handling for wrong-password / unverified-email.
+ * Mirrors /signup. Email+password uses `signInWithPassword`; OAuth uses
+ * `signInWithOAuth`. On success, lands on `/app` (dashboard). On failure,
+ * shows the Supabase error message verbatim (already user-facing —
+ * "Invalid login credentials", "Email not confirmed", etc.).
+ *
+ * The `NEXT_PUBLIC_USE_AUTH_MOCK=true` env flag re-routes to legacy mock.
  */
 import { useRouter } from "next/navigation";
 import * as React from "react";
@@ -13,6 +16,8 @@ import * as React from "react";
 import { Button } from "../../components/Button";
 import { Form } from "../../components/Form";
 import { Input } from "../../components/Input";
+import { isAuthMockEnabled } from "../../lib/auth-mock";
+import { createBrowserSupabaseClient } from "../../lib/supabase-client";
 
 export default function LoginPage(): React.ReactElement {
   const router = useRouter();
@@ -25,26 +30,63 @@ export default function LoginPage(): React.ReactElement {
     e.preventDefault();
     setError(null);
     if (!email.includes("@")) {
-      setError("Enter a valid email so we can save your session.");
+      setError("Enter a valid email so we can sign you in.");
       return;
     }
     setSubmitting(true);
     try {
-      const res = await fetch("/api/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+      if (isAuthMockEnabled()) {
+        const res = await fetch("/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = (await res.json()) as { ok: boolean };
+        if (!data.ok) {
+          setError("Could not sign in. Check your credentials and try again.");
+          setSubmitting(false);
+          return;
+        }
+        router.push("/app");
+        return;
+      }
+
+      const supabase = createBrowserSupabaseClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
-      const data = (await res.json()) as { ok: boolean; redirectTo?: string };
-      if (!data.ok) {
-        setError("Could not sign in. Check your connection and try again.");
+      if (signInError) {
+        setError(signInError.message);
         setSubmitting(false);
         return;
       }
-      // Real login lands on dashboard, not onboarding.
       router.push("/app");
-    } catch {
-      setError("Could not sign in. Check your connection and try again.");
+      router.refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setError(`Could not sign in: ${msg}`);
+      setSubmitting(false);
+    }
+  };
+
+  const handleOAuth = async (provider: "google" | "github"): Promise<void> => {
+    setError(null);
+    if (isAuthMockEnabled()) return;
+    setSubmitting(true);
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: `${window.location.origin}/auth/callback` },
+      });
+      if (oauthError) {
+        setError(oauthError.message);
+        setSubmitting(false);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setError(`Could not start sign-in: ${msg}`);
       setSubmitting(false);
     }
   };
@@ -52,10 +94,23 @@ export default function LoginPage(): React.ReactElement {
   return (
     <main id="main" className="sz-auth-page">
       <div className="sz-auth-card">
-        <p className="sz-demo-banner">
-          <strong>Demo mode.</strong> Real auth lands at M1+1.
-        </p>
+        {isAuthMockEnabled() ? (
+          <p className="sz-demo-banner">
+            <strong>Demo mode.</strong> Auth mock is active.
+          </p>
+        ) : null}
         <h1>Sign in.</h1>
+
+        <div className="sz-auth-oauth">
+          <Button variant="ghost" size="md" onClick={() => void handleOAuth("google")}>
+            Continue with Google
+          </Button>
+          <Button variant="ghost" size="md" onClick={() => void handleOAuth("github")}>
+            Continue with GitHub
+          </Button>
+        </div>
+        <div className="sz-auth-divider">or</div>
+
         <Form onSubmit={handleSubmit} errorSummary={error}>
           <Input
             variant="email"

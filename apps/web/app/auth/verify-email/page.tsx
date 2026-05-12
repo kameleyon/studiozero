@@ -1,9 +1,15 @@
 /**
- * /auth/verify-email — Trace flow S2 stub.
+ * /auth/verify-email — Phase 9 M1 Batch 2 (Forge).
  *
- * The mock skips email verification (mod1.1 cookie set immediately at
- * signup); this page is rendered for direct deep-links. Real M1+1 wiring
- * will poll Supabase Auth `email_confirmed_at` and auto-advance to S3.
+ * Trace flow S2. After `supabase.auth.signUp()` with confirm-email ON,
+ * Supabase emails a magic link; the user clicks it; the link lands on
+ * `/auth/callback?code=...` which exchanges the code for a session and
+ * redirects to `/app/onboarding/mode`. This page is the in-between
+ * "check your email" screen.
+ *
+ * If the auth mock is enabled (`NEXT_PUBLIC_USE_AUTH_MOCK=true`), email
+ * verification is skipped and we copy in a demo banner; the link button
+ * goes to `/app` directly.
  */
 import * as React from "react";
 
@@ -14,27 +20,27 @@ export const metadata = {
 };
 
 export default function VerifyEmailPage(): React.ReactElement {
+  const mockEnabled = process.env.NEXT_PUBLIC_USE_AUTH_MOCK === "true";
   return (
     <main id="main" className="sz-auth-page">
       <div className="sz-auth-card">
-        <p className="sz-demo-banner">
-          <strong>Demo mode.</strong> Email verification is stubbed for M1.
-        </p>
+        {mockEnabled ? (
+          <p className="sz-demo-banner">
+            <strong>Demo mode.</strong> Email verification is stubbed.
+          </p>
+        ) : null}
         <h1>Check your email.</h1>
         <p>
-          We sent a link to your email. In production, you&apos;d click it from
-          any device to verify and land on your dashboard.
+          We sent a verification link to your email address. Click it to
+          confirm your account and land on your dashboard.
         </p>
         <p>
-          The demo skipped this step — your session is already active. Head
-          to your dashboard to start your first audit.
+          Didn&apos;t arrive within a minute? Check your spam folder, or{" "}
+          <a href="/signup">try a different email</a>.
         </p>
-        <Button variant="primary" size="lg" href="/app" arrow>
-          Go to dashboard
+        <Button variant="primary" size="lg" href={mockEnabled ? "/app" : "/login"} arrow>
+          {mockEnabled ? "Go to dashboard" : "Back to sign in"}
         </Button>
-        <p className="sz-auth-meta">
-          Wrong email? <a href="/signup">Use a different one</a>
-        </p>
       </div>
     </main>
   );

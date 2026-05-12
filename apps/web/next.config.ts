@@ -41,11 +41,10 @@ const nextConfig: NextConfig = {
   // dir Vercel runs `next build` from (per vercel.json buildCommand).
   outputFileTracingRoot: process.cwd(),
 
-  // Landing + stub routes are fully static. Keep the door open for
-  // server actions and edge routes when M1 lands the runner endpoints.
-  experimental: {
-    // Reserved for M1 — leave empty at M0 so we don't ship unstable flags.
-  },
+  // Next 15 enables `instrumentation.ts` discovery by default — no
+  // `experimental.instrumentationHook` flag needed. The actual init
+  // lives in `apps/web/instrumentation.ts` (Forge — M1 Batch 2).
+  experimental: {},
 
   async headers() {
     return [
