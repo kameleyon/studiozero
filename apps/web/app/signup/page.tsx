@@ -35,7 +35,10 @@ import { Button } from "../../components/Button";
 import { Form } from "../../components/Form";
 import { Input } from "../../components/Input";
 import { isAuthMockEnabled } from "../../lib/auth-mock";
+import { assignVariant, EXPERIMENT_KEYS } from "../../lib/experiment";
+import { track } from "../../lib/posthog-client";
 import { createBrowserSupabaseClient } from "../../lib/supabase-client";
+import { serializeAttributionPayload } from "../../lib/utm-attribution";
 
 export default function SignupPage(): React.ReactElement {
   const router = useRouter();
@@ -43,6 +46,15 @@ export default function SignupPage(): React.ReactElement {
   const [password, setPassword] = React.useState<string>("");
   const [submitting, setSubmitting] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // Fire `signup_started` once on mount. Hook's funnel-instrumentation
+  // contract requires this event to fire from the form-mount surface so
+  // landing → signup-start drop-off is measurable per-variant.
+  // E-005 cannot assign a variant yet because we don't have a user_id
+  // until signUp() returns — variant assignment happens at completion.
+  React.useEffect(() => {
+    track("signup_started", { method: "email" });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -89,8 +101,62 @@ export default function SignupPage(): React.ReactElement {
         return;
       }
 
-      // Confirm-email ON (production) → session is null until link click.
-      // Confirm-email OFF (dev) → session present, jump to onboarding.
+      // E-005 (defer-email-verify): branch on the PostHog feature flag.
+      //   Variant A (control): require verify before mode-pick.
+      //     - If `data.session` is present (confirm-email OFF in dev),
+      //       proceed straight to onboarding.
+      //     - Else push to /auth/verify-email and wait for the link.
+      //   Variant B (treatment): skip verify, land on /app/onboarding/mode
+      //     immediately, persistent banner reminds user to verify on
+      //     first upgrade. We pass `?defer=1` so the verify-email banner
+      //     in the AppShell knows whether to render.
+      const userId = data.user?.id ?? null;
+      const variant = assignVariant({
+        key: EXPERIMENT_KEYS.DEFER_EMAIL_VERIFY,
+        userId,
+      });
+      track("signup_completed", {
+        user_id: userId ?? "",
+        method: "email",
+        email_verified: Boolean(data.session),
+        experiment_variant: variant,
+      });
+      // Lens M1 Batch 3 — UTM passthrough. Fire-and-forget; the server
+      // writes users.acquisition_attribution jsonb. Never blocks the
+      // redirect (failure surfaces only in Vercel logs).
+      try {
+        void fetch("/api/auth/signup-with-attribution", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sz_attribution_payload: serializeAttributionPayload(),
+            method: "email",
+          }),
+        });
+      } catch {
+        /* offline — server reconciles on next sign-in */
+      }
+      // Drop a TTFV start-of-clock marker. Read by the verdict screen
+      // when it fires `verdict_shown` so the experiment dashboard can
+      // measure signup → Aha latency without a server-side self-join.
+      try {
+        window.localStorage.setItem(
+          "sz.signup_completed_ts",
+          String(Date.now()),
+        );
+      } catch {
+        // localStorage may be unavailable in private-browse — non-fatal.
+      }
+
+      if (variant === "B") {
+        // Variant B: defer verification. Push to mode-pick regardless of
+        // whether Supabase returned a session — the banner persists until
+        // the user clicks the verify link.
+        router.push("/app/onboarding/mode?verify=pending");
+        return;
+      }
+
+      // Variant A (control): existing PRD §7.1 behavior.
       if (data.session) {
         router.push("/app/onboarding/mode");
       } else {
@@ -105,6 +171,12 @@ export default function SignupPage(): React.ReactElement {
 
   const handleOAuth = async (provider: "google" | "github"): Promise<void> => {
     setError(null);
+    // Lens spec §2.1 — fire signup_started for the OAuth click before
+    // we navigate away to the provider. signup_completed fires server-
+    // side at /auth/callback after exchangeCodeForSession resolves.
+    track("signup_started", {
+      method: provider === "google" ? "oauth_google" : "oauth_github",
+    });
     if (isAuthMockEnabled()) {
       setEmail("oauth-demo@example.com");
       setTimeout(() => void handleSubmit({ preventDefault: () => {} } as React.FormEvent), 0);

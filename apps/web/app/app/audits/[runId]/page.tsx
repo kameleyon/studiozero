@@ -25,6 +25,12 @@ import { FindingsRow } from "../../../../components/FindingsRow";
 import { LiveProgressRegion } from "../../../../components/LiveProgressRegion";
 import { ScoreDisplay } from "../../../../components/ScoreDisplay";
 import { VerdictCard } from "../../../../components/VerdictCard";
+import { useSupabaseUser } from "../../../../lib/auth-context";
+import {
+  assignVariant,
+  EXPERIMENT_KEYS,
+} from "../../../../lib/experiment";
+import { track } from "../../../../lib/posthog-client";
 import { useRunRealtime, type RunSnapshot } from "../../../../lib/run-realtime";
 
 import type { MockFinding } from "../../../../lib/mock-data";
@@ -188,7 +194,80 @@ function VerdictScreen({
   runId: string;
   snap: RunSnapshot;
 }): React.ReactElement {
+  const { user } = useSupabaseUser();
   const verdict = snap.verdict;
+
+  // E-005 variant tag — sticky per user, resolved once per mount.
+  const variant = React.useMemo(
+    () =>
+      assignVariant({
+        key: EXPERIMENT_KEYS.DEFER_EMAIL_VERIFY,
+        userId: user?.id ?? null,
+      }),
+    [user?.id],
+  );
+
+  // THE AHA EVENT. Fires once when the verdict screen first paints with
+  // a settled verdict. Carries `ttfv_ms` (signup_completed → now) so the
+  // funnel CTE in the experiment dashboard can avoid a self-join.
+  // We compute ttfv against a `sz.signup_completed_ts` localStorage marker
+  // dropped by the signup-success path; absent (re-audit / cross-device /
+  // ad-blocker) → null per the Lens registry contract.
+  const ttfvFiredRef = React.useRef<boolean>(false);
+  React.useEffect(() => {
+    if (!verdict) return;
+    if (ttfvFiredRef.current) return;
+    ttfvFiredRef.current = true;
+
+    let signupTs: number | null = null;
+    let isFirst = false;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem("sz.signup_completed_ts");
+        if (raw) signupTs = Number.parseInt(raw, 10) || null;
+        const firstKey = "sz.first_verdict_seen";
+        const firstSeen = window.localStorage.getItem(firstKey);
+        isFirst = !firstSeen;
+        if (isFirst) {
+          window.localStorage.setItem(firstKey, String(Date.now()));
+        }
+      } catch {
+        // localStorage unavailable — fall back to null TTFV.
+      }
+    }
+    const ttfvMs = signupTs ? Date.now() - signupTs : null;
+
+    // Map the in-app `Verdict` (underscore variant) to the analytics-event
+    // canonical form ("PASS WITH FIXES" with spaces — Lens spec). The
+    // analytics taxonomy is the customer-facing form per §7.2 Step D;
+    // the in-app type uses an identifier-safe variant for switch cases.
+    const verdictForAnalytics =
+      verdict.verdict === "PASS_WITH_FIXES" ? "PASS WITH FIXES" : verdict.verdict;
+
+    // `audit_completed` mirrors the server runner emit so the funnel
+    // walker has a client-side waypoint even when the runner channel is
+    // mocked. Hook + Lens agree this is acceptable until M2 wires the
+    // server-side fire from the Edge Function.
+    void track("audit_completed", {
+      run_id: runId,
+      verdict: verdictForAnalytics,
+      score: verdict.score.total,
+      runtime_ms: snap.elapsedMs,
+      findings_count: verdict.findings.length,
+      experiment_variant: variant,
+    });
+
+    void track("verdict_shown", {
+      run_id: runId,
+      verdict: verdictForAnalytics,
+      score: verdict.score.total,
+      findings_count: verdict.findings.length,
+      is_first_verdict_for_user: isFirst,
+      ttfv_ms: ttfvMs,
+      experiment_variant: variant,
+    });
+  }, [verdict, runId, variant, snap.elapsedMs]);
+
   if (!verdict) {
     return <p>Verdict not available.</p>;
   }

@@ -14,19 +14,51 @@ import * as React from "react";
 import { Button } from "../../../../components/Button";
 import { Card } from "../../../../components/Card";
 import { Chip } from "../../../../components/Chip";
+import { useSupabaseUser } from "../../../../lib/auth-context";
 import { isMockMode } from "../../../../lib/env";
+import {
+  assignVariant,
+  EXPERIMENT_KEYS,
+} from "../../../../lib/experiment";
+import { track } from "../../../../lib/posthog-client";
 import { createBrowserSupabaseClient } from "../../../../lib/supabase-client";
 
 type Mode = "byok" | "cli" | "managed";
 
 export default function ModePickerPage(): React.ReactElement {
   const router = useRouter();
+  const { user } = useSupabaseUser();
   const [selected, setSelected] = React.useState<Mode | null>(null);
   const [saving, setSaving] = React.useState<boolean>(false);
+  const mountedAtRef = React.useRef<number>(Date.now());
+
+  // Resolve the E-005 variant once per mount so `mode_picked` and any
+  // downstream funnel event carries the right `experiment_variant` tag.
+  // assignVariant is sticky per user — same answer every render.
+  const variant = React.useMemo(
+    () =>
+      assignVariant({
+        key: EXPERIMENT_KEYS.DEFER_EMAIL_VERIFY,
+        userId: user?.id ?? null,
+      }),
+    [user?.id],
+  );
+
+  React.useEffect(() => {
+    track("mode_picker_viewed", { experiment_variant: variant });
+  }, [variant]);
 
   const handleContinue = async (): Promise<void> => {
     if (!selected) return;
     setSaving(true);
+    track("mode_picked", {
+      mode: selected,
+      time_on_page_sec: Math.max(
+        0,
+        Math.round((Date.now() - mountedAtRef.current) / 1000),
+      ),
+      experiment_variant: variant,
+    });
     // Persist mode_pref to user_metadata so the rest of the app reads
     // a consistent value (the AppShell mode chip + layout key off it).
     if (!isMockMode()) {

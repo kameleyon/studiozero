@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { AppShell } from "../../components/AppShell";
 import { Chip } from "../../components/Chip";
+import { VerifyEmailBanner } from "../../components/VerifyEmailBanner";
 import { useSupabaseUser } from "../../lib/auth-context";
 
 /**
@@ -49,6 +50,14 @@ export default function AppLayout({
         </Chip>
       }
     >
+      {/*
+        E-005 variant B (defer-email-verify) shows a persistent banner
+        until the user clicks the verify link. The banner is a no-op for
+        users in variant A (they cannot reach /app/* without first
+        verifying), and a no-op in mock-auth dev mode. Self-decides via
+        the ?verify=pending query string + Supabase user shape.
+      */}
+      <VerifyEmailBanner />
       {children}
     </AppShell>
   );
