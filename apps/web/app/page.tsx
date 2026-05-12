@@ -1,3 +1,4 @@
+import Link from "next/link";
 import * as React from "react";
 
 import { Button } from "../components/Button";
@@ -404,14 +405,14 @@ function Footer(): React.ReactElement {
       <div className="wrap">
         <div className="sz-footer__grid">
           <div className="sz-footer__brand">
-            <a
+            <Link
               href="/"
               className="sz-nav__brand"
               aria-label="Studio Zero — home"
             >
               <span className="sz-nav__mark" aria-hidden="true" />
               <span className="sz-nav__word">STUDIO ZERO</span>
-            </a>
+            </Link>
             <p className="sz-footer__tagline">
               The independent audit for AI-built software.
             </p>

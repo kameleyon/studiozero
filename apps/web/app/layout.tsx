@@ -1,10 +1,11 @@
-import type { Metadata, Viewport } from "next";
 import * as React from "react";
 
 import {
   AI_DISCLOSURE_META_CONTENT,
   AI_DISCLOSURE_META_NAME,
 } from "../lib/ai-disclosure";
+
+import type { Metadata, Viewport } from "next";
 
 import "./globals.css";
 

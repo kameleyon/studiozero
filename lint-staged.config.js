@@ -21,9 +21,11 @@
 export default {
   // ── apps/web TS/TSX/CSS — scoped ESLint with auto-fix ────────────
   'apps/web/**/*.{ts,tsx,css}': [
-    // Use --no-warn-ignored so lint-staged doesn't blow up on staged
-    // files that next.js ignores (e.g. .next/, node_modules/).
-    () => 'npm --prefix apps/web run lint -- --fix --no-warn-ignored',
+    // `next lint` doesn't forward unknown options like --no-warn-ignored
+    // (M0 starter passed it as a hopeful pass-through; the flag never
+    // reached eslint). Ignored files are already handled by .eslintrc.json
+    // `ignorePatterns`, so dropping the flag is safe.
+    () => 'npm --prefix apps/web run lint -- --fix',
   ],
 
   // ── apps/web TS/TSX — single project-scoped tsc pass ─────────────

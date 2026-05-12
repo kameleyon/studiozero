@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
 import * as React from "react";
 
 import { StubPage } from "../../components/StubPage";
+
+import type { Metadata } from "next";
 
 /**
  * /aup — Acceptable Use Policy stub.
