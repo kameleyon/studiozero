@@ -30,3 +30,72 @@
 -- TODO: M1 — copy rls-policies.sql contents wrapped in BEGIN/COMMIT and append
 -- the runtime_config row that pins the mint Edge Function URL + jwt_secret_id.
 SELECT 'M1 placeholder: see architecture/database/rls-policies.sql + runner-jwt.md' AS status;
+
+-- ============================================================================
+-- v0.5 Cipher Fix-1 — vault.decrypt_byok() SECURITY DEFINER spec (Jury F-CRIT-2)
+-- ============================================================================
+-- Decrypts a BYOK API key from Supabase Vault using XChaCha20-Poly1305 AEAD
+-- (pgsodium TCE) with `tenant_id::text` bound as Additional Authenticated Data.
+-- A swap of ciphertext from tenant A into tenant B's row FAILS decryption because
+-- the AAD doesn't match. RETURNS NULL on AAD mismatch (caller treats as "key
+-- not available"). Audit-logs every call.
+--
+-- Caller contract:
+--   - Service-role only — RLS denies all client roles on api_keys.vault_secret_id
+--   - p_tenant_id MUST match api_keys.tenant_id for the requested key
+--   - AAD = p_tenant_id::text (per PRD §13.4 + Phase-5 Cipher Fix-4 primitive name)
+--   - NULL return on AAD mismatch (do not raise — silent fail to caller)
+--   - Every invocation writes audit_logs row with action='api_key_decrypted'
+--     (enum value added in this migration; see ALTER TYPE below)
+--
+-- Implementation note: full body lands in M1 alongside RLS policies. This
+-- function SIGNATURE is committed at M0 close per Jury F-CRIT-2 so downstream
+-- code (Forge runner, Edge Functions, Verify integration tests) can compile
+-- against a stable contract.
+-- ============================================================================
+
+-- Add audit-action enum value (forward-only per Atlas convention)
+-- ALTER TYPE audit_action ADD VALUE IF NOT EXISTS 'api_key_decrypted';
+
+-- Function signature (M1 body):
+-- CREATE OR REPLACE FUNCTION vault.decrypt_byok(
+--   p_tenant_id   uuid,
+--   p_secret_id   uuid
+-- ) RETURNS text
+-- LANGUAGE plpgsql
+-- SECURITY DEFINER
+-- SET search_path = vault, pg_temp
+-- AS $body$
+-- DECLARE
+--   v_owner_tenant uuid;
+--   v_plaintext    text;
+-- BEGIN
+--   -- 1. Verify api_keys.tenant_id matches caller's claimed tenant.
+--   SELECT tenant_id INTO v_owner_tenant FROM api_keys WHERE vault_secret_id = p_secret_id;
+--   IF v_owner_tenant IS NULL OR v_owner_tenant <> p_tenant_id THEN
+--     PERFORM audit_log_write(p_tenant_id, 'api_key_decrypted',
+--       jsonb_build_object('secret_id', p_secret_id, 'outcome', 'tenant_mismatch'));
+--     RETURN NULL;
+--   END IF;
+--
+--   -- 2. Decrypt with AAD = tenant_id::text. pgsodium returns NULL on AAD mismatch.
+--   SELECT pgsodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+--     ciphertext      => (SELECT secret FROM vault.secrets WHERE id = p_secret_id),
+--     additional      => p_tenant_id::text::bytea,
+--     nonce           => (SELECT nonce  FROM vault.secrets WHERE id = p_secret_id),
+--     key_uuid        => (SELECT key_id FROM vault.secrets WHERE id = p_secret_id)
+--   )::text INTO v_plaintext;
+--
+--   -- 3. Audit-log every call (success or AAD-fail).
+--   PERFORM audit_log_write(p_tenant_id, 'api_key_decrypted',
+--     jsonb_build_object('secret_id', p_secret_id,
+--                        'outcome', CASE WHEN v_plaintext IS NULL THEN 'aad_fail' ELSE 'ok' END));
+--
+--   RETURN v_plaintext;
+-- END;
+-- $body$;
+--
+-- REVOKE ALL ON FUNCTION vault.decrypt_byok(uuid, uuid) FROM PUBLIC, anon, authenticated;
+-- GRANT EXECUTE ON FUNCTION vault.decrypt_byok(uuid, uuid) TO service_role;
+-- COMMENT ON FUNCTION vault.decrypt_byok(uuid, uuid) IS
+--   'Cipher Fix-1: tenant-AAD-bound BYOK key decrypt. NULL on AAD mismatch.';
