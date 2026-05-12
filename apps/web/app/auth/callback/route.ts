@@ -26,6 +26,7 @@ import { NextResponse } from "next/server";
 
 import { aiDisclosureHeaders } from "../../../lib/ai-disclosure";
 import { track } from "../../../lib/analytics-events.v1";
+import { triggerE1 } from "../../../lib/email-triggers";
 import { createServerSupabaseClient } from "../../../lib/supabase-server";
 
 export const runtime = "nodejs";
@@ -89,6 +90,11 @@ export async function GET(req: Request): Promise<NextResponse> {
         user_id: userId,
         latency_ms_since_signup: 0,
       });
+      // M4 Batch 1 — fire E1 lifecycle welcome email. Fire-and-forget so
+      // the redirect isn't blocked on Resend latency. Idempotent at the
+      // trigger layer (dedupe_key="welcome"), so duplicate confirms
+      // don't re-send.
+      void triggerE1(userId);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "callback_failed";

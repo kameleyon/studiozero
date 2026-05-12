@@ -202,6 +202,21 @@ export interface EventPropsMap {
     email_id: "e1" | "e2" | "e3" | "e4" | "e5";
     user_id: string;
   };
+  /** Resend webhook → email.opened. M4 Batch 1 (Forge + Lens). */
+  e_email_opened: {
+    user_id: string;
+    provider_message_id: string;
+  };
+  /** Resend webhook → email.clicked. */
+  e_email_clicked: {
+    user_id: string;
+    provider_message_id: string;
+  };
+  /** Resend webhook → email.unsubscribed OR /api/email/unsubscribe handler. */
+  e_email_unsubscribed: {
+    user_id: string;
+    source: "resend_one_click" | "email_link" | "settings_page";
+  };
   nps_survey_submitted: {
     score: number;
     segment: "detractor" | "passive" | "promoter";
@@ -432,7 +447,27 @@ export const EVENT_REGISTRY: readonly EventRegistryRow[] = [
   {
     name: "e_email_sent",
     funnel_critical: false,
-    fires_from: "Resend webhook → app/api/webhooks/resend (M4)",
+    fires_from: "apps/web/lib/email-triggers/_common.ts — sendLifecycleEmail (M4 B1)",
+    consent: "analytics",
+  },
+  {
+    name: "e_email_opened",
+    funnel_critical: false,
+    fires_from: "apps/web/app/api/webhooks/resend/route.ts — email.opened (M4 B1)",
+    consent: "analytics",
+  },
+  {
+    name: "e_email_clicked",
+    funnel_critical: false,
+    fires_from: "apps/web/app/api/webhooks/resend/route.ts — email.clicked (M4 B1)",
+    consent: "analytics",
+  },
+  {
+    name: "e_email_unsubscribed",
+    funnel_critical: false,
+    fires_from:
+      "apps/web/app/api/webhooks/resend/route.ts (Resend) + " +
+      "apps/web/app/api/email/unsubscribe/route.ts (email link) (M4 B1)",
     consent: "analytics",
   },
   {
