@@ -1,18 +1,28 @@
 /**
- * Studio Zero — AuditEvent v1 (discriminated union)
+ * Studio Zero — AuditEvent v1.1 (discriminated union)
+ *
+ * Schema version: v1.1 (additive bump from v1 — see "Version history" below).
  *
  * Owner: Atlas (data) + Verify (contract gate)
  * PRD: §13.3 Runner contract (AuditEvent enum), §9.4 (final_verdict payload),
- *      §7.2 Step C (live progress stream rendering), §14.6 HC2 (aria-live policy).
+ *      §7.2 Step C (live progress stream rendering), §14.6 HC2 (aria-live policy),
+ *      §13.4 (CLI mode privacy invariant — gates the CLI variants below).
+ * Decision: architecture/decisions.md ARCH-D10 (cli_heartbeat in the AuditEvent
+ *   enum — single contract for run-progress AND device-liveness).
  * State machine: ia/user-flows/audit-run-state-machine.md
  *
  * Emitted by `runner.runAudit(): AsyncIterable<AuditEvent>` and persisted to
  * `runs.events_log` JSONB array so late subscribers can replay (state-machine EC-2).
  * Web app + CLI both consume this contract identically. Any structural change is
- * a new version file (audit-event.v2.ts) — never an in-place edit.
+ * a new version file (audit-event.v2.ts) — never an in-place edit. Additive
+ * variants (v1 → v1.1) are allowed in place because every v1 consumer remains
+ * exhaustive over v1 kinds AND treats unknown future kinds as forward-compatible
+ * (unrecognized kinds skip rather than throw at the consumer boundary).
  *
  * Throttle policy: producer SHOULD coalesce `progress` events to ≤ 4 updates/sec
  * per agent (Halo HC2 — SC 2.2.1 prevents AT overwhelm in aria-live regions).
+ * CLI heartbeats are emitted on a 30s `setInterval` while a run is in flight
+ * (ARCH-D10 + sprint M3 line 54), independent of the progress throttle.
  *
  * Type-level invariants worth knowing:
  *   - `kind` is the discriminator. Narrow on `kind`, not on field presence.
@@ -20,7 +30,22 @@
  *     at the runner boundary by ajv before emission (Verify §18.1 Contract layer).
  *   - `error.recoverable` drives the runs.state transition target
  *     (true → failed_recoverable, false → failed_terminal).
+ *   - CLI-mode variants (`cli_heartbeat`, `cli_paired`, `cli_revoked`,
+ *     `tamper_detected`) NEVER carry source bytes. Their `pairing_id` is the
+ *     `cli_pairings.id` UUID and is the only customer-correlated field. PRD
+ *     §13.4 privacy invariant is enforced at the producer (the CLI's
+ *     `apps/cli/src/network/upload-verdict.ts`) and at the runtime body cap
+ *     in `apps/cli/src/network/studio-client.ts` (64 KiB max).
+ *
+ * ---------------------------------------------------------------------------
+ * Version history
+ * ---------------------------------------------------------------------------
+ *   v1.0 — initial enum: progress | finding | agent_log | final_verdict | error
+ *   v1.1 — Phase 9 M3 (ARCH-D10 close): adds CLI-mode variants
+ *            cli_heartbeat | cli_paired | cli_revoked | tamper_detected.
+ *          Additive only; all v1.0 producers + consumers remain valid.
  */
+export const AUDIT_EVENT_SCHEMA_VERSION = "v1.1" as const;
 
 // ---------- shared primitives ----------
 
@@ -178,6 +203,109 @@ export interface ErrorEvent {
   at?: string;
 }
 
+// ---------- CLI-mode variants (v1.1, ARCH-D10 close, Phase 9 M3) ----------
+//
+// Privacy invariant: NONE of these variants carry source bytes. The
+// `pairing_id` is the `cli_pairings.id` UUID (server-minted at C5 of the
+// pairing flow). Device + binary fingerprints are hashes only — never raw
+// hostnames in CLI events. PRD §13.4 + Comply consent-and-data-minimisation.
+
+/** Who revoked a CLI pairing.
+ *   - 'user'             — customer hit `studio-zero logout` or revoked in web UI.
+ *   - 'admin'            — staff console revoke.
+ *   - 'tamper_detected'  — auto-revoke after `recordTamperEvent` (Cipher Fix-3c).
+ *   - 'expiry'           — pairing_token TTL elapsed (90d default).
+ */
+export type CliRevokeReason = 'user' | 'admin' | 'tamper_detected' | 'expiry';
+
+/**
+ * 30-second liveness ping from a paired CLI. Producer is the CLI's
+ * `apps/cli/src/network/heartbeat.ts` (M3+1 carry from Forge). Consumer is
+ * the web's `POST /api/cli/heartbeat` route which UPSERTs into the
+ * `cli_heartbeat` table (Atlas 0004) and mirrors `last_seen_at` onto
+ * `cli_pairings.last_heartbeat_at` for the `active_pairings` index-only
+ * query. The `stale_after_5min()` function flips status for the UI per
+ * `cli-pairing-and-tamper.md` EC-6.
+ *
+ * No customer code, no project path. The presence of `last_active_at` is
+ * the liveness signal; the absence after 5min flips the UI to "stale".
+ */
+export interface CliHeartbeatEvent {
+  kind: 'cli_heartbeat';
+  /** UUID of `cli_pairings.id`. Server-minted at C5. */
+  pairing_id: string;
+  /** SemVer string from `apps/cli/src/commands/version.ts`. */
+  cli_version: string;
+  /** RFC 3339 timestamp of the most-recent CLI activity. */
+  last_active_at: string;
+  /** Optional UUID of the currently-claimed job, if mid-run. */
+  current_run_id?: Ulid;
+  at?: string;
+}
+
+/**
+ * A CLI device successfully completed pair-confirm (C5). Emitted by the
+ * `POST /api/cli/pair/confirm` route after the pairing-token is minted.
+ * UI consumers update the device list in `/app/settings/cli`.
+ *
+ * Device fingerprint is a hash; never the raw hostname.
+ */
+export interface CliPairedEvent {
+  kind: 'cli_paired';
+  /** UUID of the new `cli_pairings.id`. */
+  pairing_id: string;
+  /**
+   * Stable per-device hash (SHA-256 of hostname+os+arch under the
+   * per-deployment pepper). Used by UI to de-dupe device entries across
+   * re-pair cycles. Raw hostname is NEVER emitted.
+   */
+  device_fingerprint: string;
+  /** SemVer string. */
+  cli_version?: string;
+  at?: string;
+}
+
+/**
+ * A CLI pairing has been revoked. Emitted by the `POST /api/cli/pair`
+ * (DELETE) route and by `recordTamperEvent` when `revoked_by='tamper_detected'`.
+ * Consumers flip the device row to `revoked` in the UI and refuse subsequent
+ * authenticated calls from that bearer token.
+ */
+export interface CliRevokedEvent {
+  kind: 'cli_revoked';
+  /** UUID of the revoked `cli_pairings.id`. */
+  pairing_id: string;
+  /** Provenance of the revocation. */
+  revoked_by: CliRevokeReason;
+  at?: string;
+}
+
+/**
+ * Manifest tamper detected at the verdict-route's signature-verify step
+ * (Cipher Fix-3c — `apps/web/lib/cli-manifest-verifier.ts`). Carries the
+ * reported vs expected SHA-256 hash so the audit_logs trail is reproducible.
+ *
+ * The CLI's verdict still renders (D7 transparency posture); the event is
+ * the durable record + the trigger for `recordTamperEvent`. Per the
+ * verifier's lock: the server is on a stable network; missing manifest IS
+ * a tamper signal.
+ */
+export interface TamperDetectedEvent {
+  kind: 'tamper_detected';
+  /** Short token: 'binary_hash_mismatch', 'manifest_signature_invalid',
+   *  'no_manifest_for_version'. Mirrors `CliClaimVerifyResult.reason`. */
+  reason: string;
+  /** SHA-256 hex the CLI claimed (lowercase). */
+  binary_hash_actual: string;
+  /** SHA-256 hex the manifest authorized (lowercase). Empty if no manifest. */
+  binary_hash_expected: string;
+  /** Optional UUID of the `cli_pairings.id` involved, if known. */
+  pairing_id?: string;
+  /** Optional CLI version reported by the offending request. */
+  cli_version?: string;
+  at?: string;
+}
+
 // ---------- the union ----------
 
 export type AuditEvent =
@@ -185,7 +313,12 @@ export type AuditEvent =
   | FindingEvent
   | AgentLogEvent
   | FinalVerdictEvent
-  | ErrorEvent;
+  | ErrorEvent
+  // v1.1 — Phase 9 M3 (ARCH-D10 close):
+  | CliHeartbeatEvent
+  | CliPairedEvent
+  | CliRevokedEvent
+  | TamperDetectedEvent;
 
 /** Producer-side discriminator literal. Useful as an enum-like at runtime. */
 export const AUDIT_EVENT_KINDS = [
@@ -194,6 +327,11 @@ export const AUDIT_EVENT_KINDS = [
   'agent_log',
   'final_verdict',
   'error',
+  // v1.1 — Phase 9 M3 (ARCH-D10 close):
+  'cli_heartbeat',
+  'cli_paired',
+  'cli_revoked',
+  'tamper_detected',
 ] as const;
 export type AuditEventKind = (typeof AUDIT_EVENT_KINDS)[number];
 
@@ -223,6 +361,24 @@ export function isErrorEvent(e: AuditEvent): e is ErrorEvent {
   return e.kind === 'error';
 }
 
+// ---------- v1.1 type guards (Phase 9 M3, ARCH-D10) ----------
+
+export function isCliHeartbeatEvent(e: AuditEvent): e is CliHeartbeatEvent {
+  return e.kind === 'cli_heartbeat';
+}
+
+export function isCliPairedEvent(e: AuditEvent): e is CliPairedEvent {
+  return e.kind === 'cli_paired';
+}
+
+export function isCliRevokedEvent(e: AuditEvent): e is CliRevokedEvent {
+  return e.kind === 'cli_revoked';
+}
+
+export function isTamperDetectedEvent(e: AuditEvent): e is TamperDetectedEvent {
+  return e.kind === 'tamper_detected';
+}
+
 /** Compile-time exhaustiveness assertion. Drop into the default branch of any
  *  switch on `event.kind` to force TS to error if a new variant is added
  *  without updating the consumer.
@@ -234,6 +390,10 @@ export function isErrorEvent(e: AuditEvent): e is ErrorEvent {
  *    case 'agent_log': ...
  *    case 'final_verdict': ...
  *    case 'error': ...
+ *    case 'cli_heartbeat': ...
+ *    case 'cli_paired': ...
+ *    case 'cli_revoked': ...
+ *    case 'tamper_detected': ...
  *    default: return assertNever(e);
  *  }
  *  ```

@@ -42,6 +42,8 @@ import { createPublicKey, verify as nodeCryptoVerify } from "node:crypto";
 
 import { createServiceRoleClient } from "./supabase-service";
 
+import type { TamperDetectedEvent } from "../../../architecture/schemas/audit-event.v1";
+
 /** Manifest shape — structurally identical to the CLI side. */
 export interface CliManifest {
   version: string;
@@ -267,7 +269,22 @@ export async function recordTamperEvent(
     // Column not present yet (pre-0008) — audit_logs is enough.
   }
 
-  // 2. Write audit_logs row.
+  // 2. Write audit_logs row. The metadata `event` field is shaped as an
+  //    AuditEvent v1.1 `tamper_detected` variant (ARCH-D10 close) so
+  //    downstream consumers (web UI, runs.events_log replay, audit
+  //    forensics) can deserialize the row through the same discriminated
+  //    union they use for every other audit event. The full discriminated
+  //    shape is captured even though the column is JSONB — schemas-as-
+  //    contracts (BUILD_FLOW.md Phase 5).
+  const tamperEvent: TamperDetectedEvent = {
+    kind: "tamper_detected",
+    reason: params.reason,
+    binary_hash_actual: params.reportedHash.toLowerCase(),
+    binary_hash_expected: params.expectedHash.toLowerCase(),
+    pairing_id: params.cliPairingId,
+    cli_version: params.cliVersion,
+    at: new Date().toISOString(),
+  };
   await supabase.from("audit_logs").insert({
     tenant_id: null,
     action: "cli_tamper_detected",
@@ -279,6 +296,7 @@ export async function recordTamperEvent(
       expected_hash: params.expectedHash,
       reason: params.reason,
       manifest_signature_valid: params.manifestSignatureValid,
+      event: tamperEvent,
     },
   });
 }

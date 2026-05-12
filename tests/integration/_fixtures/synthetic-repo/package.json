@@ -1,0 +1,9 @@
+{
+  "name": "synthetic-repo",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Synthetic fixture used by tests/integration/cli-no-upload.spec.ts to exercise the CLI's `studio-zero run` flow without touching real customer code. The contents here MUST NOT appear in any uploaded body — the network-tap spec asserts exactly that.",
+  "scripts": {
+    "build": "echo synthetic"
+  }
+}

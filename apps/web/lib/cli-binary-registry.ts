@@ -38,6 +38,8 @@ import path from "node:path";
 
 import "server-only";
 
+import type { TamperDetectedEvent } from "../../../architecture/schemas/audit-event.v1";
+
 export type BinaryHashStatus = "registered" | "unrecognized";
 
 interface ManifestBuild {
@@ -130,4 +132,28 @@ export function lookupBinaryHash(binaryHash: string): BinaryHashStatus {
 export function __resetManifestCacheForTest(): void {
   cached = null;
   cachedAt = 0;
+}
+
+/**
+ * Construct an AuditEvent v1.1 `tamper_detected` variant for the case
+ * where a CLI's reported binary hash is not on the registered list
+ * (ARCH-D10 close, Phase 9 M3). Callers (the verdict route handler) can
+ * pipe the returned event into the runs.events_log + the realtime channel
+ * so the web UI surfaces the same C-TAMPER amber banner the CLI sees
+ * locally. Per D7: a mismatch shows the banner, it does NOT block the
+ * verdict.
+ */
+export function tamperEventForUnrecognizedBinary(
+  reportedBinaryHash: string,
+  opts: { pairingId?: string; cliVersion?: string } = {},
+): TamperDetectedEvent {
+  return {
+    kind: "tamper_detected",
+    reason: "unrecognized_binary",
+    binary_hash_actual: reportedBinaryHash.toLowerCase(),
+    binary_hash_expected: "",
+    ...(opts.pairingId !== undefined ? { pairing_id: opts.pairingId } : {}),
+    ...(opts.cliVersion !== undefined ? { cli_version: opts.cliVersion } : {}),
+    at: new Date().toISOString(),
+  };
 }

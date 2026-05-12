@@ -4,24 +4,24 @@
 
 Six files in this directory carry the load-bearing data contracts of Studio Zero. Treat them as **schemas-as-files, not schemas-as-prose** (BUILD_FLOW.md Phase 5 lesson learned). If a reviewer adds a field to the audit output without updating these schemas, downstream consumers silently diverge — Verify's CI gate exists to make that impossible.
 
-| File | What it constrains | Consumed by |
-|---|---|---|
-| `audit-input.v1.schema.json` | The `POST /api/runs` intake payload (PRD §7.2 + §8 + §9.1 + §14.7). | Web app run-dispatcher, CLI control-plane, audit-input ajv validator at the API edge, `runs` seed row + `projects` upsert. |
-| `audit-output.v1.schema.json` | The terminal `final_verdict.result` payload (PRD §9.4). | Web app, score engine, share view at `/v/<short-id>`, `verdict-card` component, score_snapshots persistence, V1.5 Auto-PR body composer. |
-| `audit-event.v1.ts` | The `runner.runAudit()` event stream (PRD §13.3). | Hosted runner, CLI runner, web Realtime channel consumers, `runs.events_log` persister. |
-| `score_engine.v1.json` | Weights, thresholds, rounding mode, verdict-rule priority (PRD §10). | Score-engine implementation in the runner, score_snapshots column `score_engine_version`. |
-| `score_engine.v1.md` | Canonical mathematical runbook for the score formula + rule precedence + banker's-rounding pseudocode (PRD §10). | Forge (implements `score_v1()` from this doc), human reviewers verifying any fixture row by hand. |
-| `score_engine.v1.fixtures.json` | Canonical (findings_input → score+verdict) rows. | `pnpm test score-engine` contract-test suite (closes Verify Blocker B1). |
+| File                            | What it constrains                                                                                                                                                                               | Consumed by                                                                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `audit-input.v1.schema.json`    | The `POST /api/runs` intake payload (PRD §7.2 + §8 + §9.1 + §14.7).                                                                                                                              | Web app run-dispatcher, CLI control-plane, audit-input ajv validator at the API edge, `runs` seed row + `projects` upsert.                                              |
+| `audit-output.v1.schema.json`   | The terminal `final_verdict.result` payload (PRD §9.4).                                                                                                                                          | Web app, score engine, share view at `/v/<short-id>`, `verdict-card` component, score_snapshots persistence, V1.5 Auto-PR body composer.                                |
+| `audit-event.v1.ts`             | The `runner.runAudit()` event stream (PRD §13.3). Currently at **v1.1** (Phase 9 M3, ARCH-D10 close — adds `cli_heartbeat`, `cli_paired`, `cli_revoked`, `tamper_detected` variants additively). | Hosted runner, CLI runner, web Realtime channel consumers, `runs.events_log` persister, `apps/web/lib/cli-binary-registry.ts`, `apps/web/lib/cli-manifest-verifier.ts`. |
+| `score_engine.v1.json`          | Weights, thresholds, rounding mode, verdict-rule priority (PRD §10).                                                                                                                             | Score-engine implementation in the runner, score_snapshots column `score_engine_version`.                                                                               |
+| `score_engine.v1.md`            | Canonical mathematical runbook for the score formula + rule precedence + banker's-rounding pseudocode (PRD §10).                                                                                 | Forge (implements `score_v1()` from this doc), human reviewers verifying any fixture row by hand.                                                                       |
+| `score_engine.v1.fixtures.json` | Canonical (findings_input → score+verdict) rows.                                                                                                                                                 | `pnpm test score-engine` contract-test suite (closes Verify Blocker B1).                                                                                                |
 
 ## Validation pattern (ajv)
 
-Studio Zero standardises on **ajv** (Draft 2020-12 mode) at every boundary that emits or accepts these payloads. The runner MUST validate `final_verdict.result` against `audit-output.v1.schema.json` *before* emission — if validation fails, the runner emits `{ kind: 'error', code: 'schema_invalid', recoverable: false }` instead, transitioning the run to `failed_terminal` (audit-run-state-machine.md, jury_synthesizing state).
+Studio Zero standardises on **ajv** (Draft 2020-12 mode) at every boundary that emits or accepts these payloads. The runner MUST validate `final_verdict.result` against `audit-output.v1.schema.json` _before_ emission — if validation fails, the runner emits `{ kind: 'error', code: 'schema_invalid', recoverable: false }` instead, transitioning the run to `failed_terminal` (audit-run-state-machine.md, jury_synthesizing state).
 
 ```ts
-import Ajv2020 from 'ajv/dist/2020';
-import addFormats from 'ajv-formats';
-import auditOutputSchema from './audit-output.v1.schema.json' assert { type: 'json' };
-import scoreEngineSchema from './score_engine.v1.json'   assert { type: 'json' };
+import Ajv2020 from "ajv/dist/2020";
+import addFormats from "ajv-formats";
+import auditOutputSchema from "./audit-output.v1.schema.json" assert { type: "json" };
+import scoreEngineSchema from "./score_engine.v1.json" assert { type: "json" };
 
 const ajv = new Ajv2020({
   allErrors: true,
@@ -30,9 +30,9 @@ const ajv = new Ajv2020({
   strictTypes: true,
   // We use oneOf for evidence-type discrimination; ajv handles this natively.
 });
-addFormats(ajv);  // date-time, uri
+addFormats(ajv); // date-time, uri
 
-export const validateAuditOutput   = ajv.compile(auditOutputSchema);
+export const validateAuditOutput = ajv.compile(auditOutputSchema);
 export const validateScoreEngineV1 = ajv.compile(scoreEngineSchema);
 
 // At runner emission:
@@ -57,24 +57,26 @@ Strict mode is non-negotiable. `additionalProperties: false` is set at every obj
 
 …ships as a **new version file** (`score_engine.v2.json`, `audit-output.v2.schema.json`, `audit-event.v2.ts`). The version stamp on every persisted score snapshot (`score_snapshots.score_engine_version`) means old runs remain mathematically reproducible against the engine that produced them, and cross-version re-audit comparisons go through the analytics-emitted `v1_equivalent_score` column (Atlas v0.2 Critical 1 fix — see `architecture/database/tables.sql` and `migration-order.md` for the `score_engine_versions` and `score_snapshots` tables).
 
-Additive, non-breaking changes (e.g., adding a new *optional* field with `additionalProperties: false` already locked) are still considered version bumps for traceability — version stamps are cheap, divergence is expensive.
+Additive, non-breaking changes (e.g., adding a new _optional_ field with `additionalProperties: false` already locked) are still considered version bumps for traceability — version stamps are cheap, divergence is expensive.
 
 ## Test-fixture-as-contract-test pattern
 
 `score_engine.v1.fixtures.json` is the contract test. The implementation under test is `runner/src/score-engine/v1/index.ts` (to be written by Forge at M0). The PR-blocking test in `tests/contract/score-engine.spec.ts` does, in essence:
 
 ```ts
-import fixtures from '../../architecture/schemas/score_engine.v1.fixtures.json' assert { type: 'json' };
-import { scoreV1 } from '../../runner/src/score-engine/v1';
+import fixtures from "../../architecture/schemas/score_engine.v1.fixtures.json" assert { type: "json" };
+import { scoreV1 } from "../../runner/src/score-engine/v1";
 
-describe('score_engine v1 — fixture contract', () => {
+describe("score_engine v1 — fixture contract", () => {
   for (const row of fixtures.rows) {
     it(`${row.id} — ${row.label}`, () => {
       const out = scoreV1(row.findings_input);
       expect(out.score).toBe(row.expected_output.score);
       expect(out.verdict).toBe(row.expected_output.verdict);
       // Optional but recommended: assert the rule-precedence trace
-      expect(out.verdict_rule_triggered).toBe(row.expected_breakdown.verdict_rule_triggered);
+      expect(out.verdict_rule_triggered).toBe(
+        row.expected_breakdown.verdict_rule_triggered,
+      );
     });
   }
 });
@@ -82,7 +84,7 @@ describe('score_engine v1 — fixture contract', () => {
 
 Every row in `score_engine.v1.fixtures.json` includes an `expected_breakdown` block showing the math (`deduction_total`, `raw_score_pre_round`, `raw_score_post_round`, `clamped`, `any_blocker`, `verdict_rule_triggered`). When a row fails, the breakdown tells the reviewer exactly which step diverged — they don't have to redo the arithmetic.
 
-**Rule-precedence rows.** SE-R02 and SE-R15 specifically assert the verdict-rule *priority ordering*, not just the outcome. SE-R15 has both `any_blocker = true` AND `score = 68 < 70` — the test must witness that the implementation marked `any_blocker` as the triggering rule, not `score_lt_fail_below`. This protects against an implementation that accidentally short-circuits the score-band check and produces the right verdict for the wrong reason.
+**Rule-precedence rows.** SE-R02 and SE-R15 specifically assert the verdict-rule _priority ordering_, not just the outcome. SE-R15 has both `any_blocker = true` AND `score = 68 < 70` — the test must witness that the implementation marked `any_blocker` as the triggering rule, not `score_lt_fail_below`. This protects against an implementation that accidentally short-circuits the score-band check and produces the right verdict for the wrong reason.
 
 ## Cross-references
 
@@ -109,7 +111,28 @@ Closes `sprint/milestone-M0.md` F-MIN-1 (Atlas-owed deliverables) and Jury Phase
 - [x] **M0 schema:validate ready** — `audit-input.v1.schema.json` is JSON Schema Draft 2020-12, `additionalProperties: false` at every level, ajv-compilable; ready for Verify's `pnpm test schema:validate` harness which Pipeline + Verify are wiring in parallel.
 
 Constraints honoured:
+
 - JSON Schema Draft 2020-12 strict mode — ajv-compilable.
 - `score_engine.v1.md` is the canonical mathematical reference; Forge implements `score_v1()` from it.
 - `notifications` table carries `tenant_id` + RLS hint comment; service-role-only INSERT; client SELECT/UPDATE own rows. No anon / PUBLIC access.
 - C4 corrects a doc reference to an existing column (`tenants.retention_days_code`); no new column invented.
+
+---
+
+## Atlas — Phase 9 M3 ARCH-D10 close
+
+Closes `architecture/decisions.md` ARCH-D10 (`cli_heartbeat` event in AuditEvent enum) and M3 Jury cross-cutting Major #3.
+
+- [x] **`audit-event.v1.ts` bumped to schema version v1.1** — the file header documents the version history and exports `AUDIT_EVENT_SCHEMA_VERSION = "v1.1"`. The bump is **additive** — every v1.0 producer + consumer remains valid; only consumers that switch exhaustively over `AuditEventKind` need to add cases for the new variants (the `assertNever` example block in the file documents the required pattern).
+- [x] **4 new variants land** —
+  - `cli_heartbeat` — 30s liveness ping from a paired CLI (`pairing_id`, `cli_version`, `last_active_at`). Consumer is the `cli_heartbeat` table (Atlas 0004) + the UI's active-pairings list.
+  - `cli_paired` — emitted after successful pair-confirm (C5). `device_fingerprint` is a hash; raw hostname is NEVER persisted in the event.
+  - `cli_revoked` — emitted on user revoke, admin revoke, tamper auto-revoke, or expiry (90d).
+  - `tamper_detected` — emitted by `apps/web/lib/cli-manifest-verifier.ts` `recordTamperEvent` on signature mismatch or unrecognized binary hash. Mirrors the `CliClaimVerifyResult.reason` token set.
+- [x] **Consumers updated** —
+  - `apps/web/lib/cli-manifest-verifier.ts` — the `audit_logs.metadata` JSONB now carries a `tamper_detected` shaped event under `metadata.event`, so realtime + replay paths use the same discriminated union.
+  - `apps/web/lib/cli-binary-registry.ts` — exports `tamperEventForUnrecognizedBinary()` helper for the verdict route to construct a typed event when a hash is `unrecognized`.
+- [x] **Privacy invariant unchanged** — none of the new variants carry source bytes; `pairing_id` is the only customer-correlated field. Device fingerprints are hashes (Comply consent-and-data-minimisation).
+- [x] **Backward compatibility** — `vitest tests/schema-validate.test.ts` and the existing 11 CLI integration specs continue to pass. The discriminated union remains exhaustive (compile-time check via `assertNever`).
+
+References: `architecture/decisions.md` ARCH-D10, `sprint/milestone-M3.md` exit-gate item 10, `shared_context/projects/studio-zero-productization/phase9-m3-audit-jury.md` cross-cutting #3.
