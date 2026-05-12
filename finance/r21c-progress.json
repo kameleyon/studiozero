@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "last_updated": "2026-05-12T00:00:00Z",
+  "updated_by": "meter-bootstrap",
+  "current_week": 5,
+  "wk_9_gate_threshold": 5,
+  "wk_9_gate_target_band": "5-10",
+  "stages": {
+    "S0_reach": {
+      "this_week_impressions": null,
+      "cumulative_wk5_to_now": null,
+      "trend": null,
+      "owner": "Signal",
+      "data_source": "channel_dashboards",
+      "comment": "Pending wk-5 Friday digest from Signal."
+    },
+    "S2_alpha_list_signups": {
+      "cumulative_signups": null,
+      "this_week_signups": null,
+      "today_signups": null,
+      "wk75_threshold": 10,
+      "wk75_status": "pending",
+      "owner": "Lens",
+      "data_source": "PostHog Insight alpha-list-signups",
+      "comment": "Lens adds alpha_list_signup event at M0 close per marketing/analytics-spec.md §5.4."
+    },
+    "S3_paying_managed": {
+      "cumulative_paying": null,
+      "this_week_paying": null,
+      "today_paying": null,
+      "wk9_threshold": 5,
+      "wk9_status": "pending",
+      "mrr_pulled_forward_usd": null,
+      "owner": "Meter",
+      "data_source": "subscriptions table + Stripe webhook",
+      "comment": "is_alpha_cohort flag landing in apps/web/lib/analytics-events.v1.ts (Lens) before daily cadence starts wk 6."
+    }
+  },
+  "escalations_active": [],
+  "next_escalation_check": "2026-06-15T09:00:00Z",
+  "verdict_at_wk9_close": "pending",
+  "verdict_rationale": ""
+}
