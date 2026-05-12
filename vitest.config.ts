@@ -44,16 +44,35 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html", "lcov", "json-summary"],
       reportsDirectory: "./coverage",
-      include: ["tests/**/*.{ts,js}"],
+      // Measure the modules our tests EXERCISE so the coverage figure
+      // reflects security-bearing code at the root (per
+      // test-strategy.md §1: ≥90% on redaction middleware, ≥90% on SSRF
+      // egress filter, ≥95% on score-engine reference impl).
+      include: [
+        "tests/**/*.{ts,js}",
+        "apps/runner/src/ssrf-guard.ts",
+        "apps/runner/src/path-traversal-guard.ts",
+        "apps/runner/src/ingestion-limits.ts",
+        "apps/runner/src/run-state-machine.ts",
+        "apps/runner/src/realtime-emitter.ts",
+        "apps/runner/src/reviewers/**/*.ts",
+        "apps/web/lib/sentry-redaction.ts",
+        "apps/web/lib/ai-disclosure.ts",
+        "architecture/schemas/score_engine.v1.json",
+      ],
       exclude: [
         "**/*.d.ts",
         "**/node_modules/**",
         "**/coverage/**",
         "**/.next/**",
-        "apps/**", // apps own their coverage thresholds
+        // apps/web also runs its own next-typed coverage — we don't
+        // double-count the React tree here.
+        "apps/web/app/**",
+        "apps/web/components/**",
+        "apps/runner/tests/**",
         // audit-event.v1.ts is a *types* file with one tiny `assertNever`
         // runtime helper. Coverage on it lands at M1 when the runner
-        // exercises every variant — at M0 it's deliberately uncovered.
+        // exercises every variant.
         "architecture/schemas/audit-event.v1.ts",
       ],
       thresholds: {
