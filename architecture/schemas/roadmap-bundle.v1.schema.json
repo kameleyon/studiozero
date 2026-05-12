@@ -1,0 +1,454 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://studio-zero.dev/schemas/roadmap-bundle.v1.schema.json",
+  "title": "Studio Zero Roadmap Bundle v1",
+  "description": "Stable contract for the final delivered Build mode bundle (PRD §7.3 step 5). The bundle is the aggregate of every layer-lead's output, sealed at builds.state='delivered' and downloadable as a zip + browseable docs + (optionally) a seeded GitHub repo. The Jury audit gate (PRD §7.3 step 7) evaluates an instance of this shape and emits the audit_verdict that populates builds.delivered_verdict — a FAIL verdict refuses delivery (V2 audit-gate-blocks-delivery negative test; see architecture/database/migrations/0009_build_mode_v2.sql §D builds_delivered_verdict_required CHECK). Strict mode (additionalProperties: false) at every top-level component. The component names mirror the build_artifacts.artifact_type enum in 0009 §E so the bundle assembler can emit one artifact row per component plus the sealing full_bundle_zip row. Cross-refs: PRD §7.3 Build Workflow; sprint/milestone-V2.md Forge deliverables + Verify exit gate (ajv-validates a sample bundle); BIGBRAIN.md (PRD layer); SYSTEM_ACHITECTURE.md §3 layer dispatch.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "build_id",
+    "tenant_id",
+    "project_name",
+    "generated_at",
+    "score_engine_version",
+    "score",
+    "verdict",
+    "roadmap",
+    "architecture",
+    "prd",
+    "brand",
+    "voice",
+    "decisions",
+    "risks",
+    "cogs",
+    "channels",
+    "readme"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Pinned schema version. New shape = new version (v2, v3...). Never edited in place.",
+      "type": "string",
+      "const": "roadmap-bundle.v1"
+    },
+    "build_id": {
+      "description": "ULID of the builds row that produced this bundle. Crockford alphabet, 26 chars (mirrors builds.id CHECK in 0009 §D).",
+      "type": "string",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "tenant_id": {
+      "description": "UUID of the owning tenant. The bundle is delivered to this tenant only; cross-tenant retrieval is denied by RLS on build_artifacts.",
+      "type": "string",
+      "format": "uuid"
+    },
+    "project_name": {
+      "description": "Display name from the confirmed BigBrain brief (brief.v1 project_name). Renders as the bundle title and the seeded GitHub repo name (slug-normalized).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "generated_at": {
+      "description": "RFC 3339 timestamp the bundle was sealed by the bundle assembler. Distinct from builds.delivered_at (which is set when state transitions to 'delivered' after repo_seeding).",
+      "type": "string",
+      "format": "date-time"
+    },
+    "score_engine_version": {
+      "description": "Pinned score engine version that produced the verdict + score. Persisted to score_snapshots row alongside the integer score so re-audits across rubric-version boundaries can be compared via v1_equivalent_score backfill (mirrors audit-output.v1).",
+      "type": "string",
+      "pattern": "^v[0-9]+$"
+    },
+    "score": {
+      "description": "Deterministic readiness score per the PRD §10 formula evaluated against the audit gate's findings on the generated artifact. Integer 0..100 after rounding.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "verdict": {
+      "description": "Jury audit gate verdict on the generated artifact (PRD §7.3 step 7). The bundle is delivered only when this is PASS or PASS WITH FIXES. A FAIL verdict refuses delivery (V2 exit-gate negative test) — builds.state lands on audit_gate_failed, not delivered. (The audit_verdict enum value persists to builds.delivered_verdict only on pass.)",
+      "type": "string",
+      "enum": ["PASS", "PASS WITH FIXES", "FAIL"]
+    },
+    "roadmap": {
+      "description": "Sprint's milestone-format roadmap. Non-empty ordered list of milestones the customer ships against. Mirrors the sprint/milestone-MX.md format used internally so the customer can drop the rendered roadmap straight into their own Sprint workflow.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/roadmapMilestone" }
+    },
+    "architecture": {
+      "description": "Axiom-produced architecture document. System diagram + component inventory + data model + decisions. Markdown body + structured component list for tooling.",
+      "$ref": "#/$defs/architectureDoc"
+    },
+    "prd": {
+      "description": "BigBrain-produced PRD for the customer's product. Goals, non-goals, user workflows, technical architecture summary. Markdown body + the structured fields tooling needs (goals[], non_goals[], success_criteria[] — echoed from the confirmed brief).",
+      "$ref": "#/$defs/prdDoc"
+    },
+    "brand": {
+      "description": "Canvas + Pixel brand tokens. Colors, typography, spacing scale, voice cues. Tooling consumes the structured token list; the rendered preview is markdown.",
+      "$ref": "#/$defs/brandDoc"
+    },
+    "voice": {
+      "description": "Herald brand-voice document. Tone, reading-level target, do/don't lists, sample copy for verdict surfaces + emails + landing copy.",
+      "$ref": "#/$defs/voiceDoc"
+    },
+    "decisions": {
+      "description": "Non-empty list of locked decisions Axiom + BigBrain made during the build. Each decision carries an ID, the question, the locked answer, the rationale, and any cross-references. Mirrors architecture/decisions.md ARCH-D<N> format.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/decision" }
+    },
+    "risks": {
+      "description": "Sprint-format risk register. Each row: risk, likelihood, impact, mitigation owner, deadline.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/risk" }
+    },
+    "cogs": {
+      "description": "Penny COGS analysis. Estimated unit economics for the product (LLM/cloud/storage costs at projected scale; pricing recommendations). Empty fields where Penny declines to estimate (honest gap).",
+      "$ref": "#/$defs/cogsDoc"
+    },
+    "channels": {
+      "description": "Signal go-to-market channels. Recommended acquisition channels with rationale + early-instrument plan (Hook integration). Empty array is permitted (internal-tooling risk_profile).",
+      "$ref": "#/$defs/channelsDoc"
+    },
+    "readme": {
+      "description": "README markdown the seeded repo ships with. Quick-start, prerequisites, structure overview, links to the other bundle components.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 50000
+    },
+    "github_repo_url": {
+      "description": "Optional. The seeded GitHub repo URL when builds.output_preference IN ('roadmap_docs_seed','roadmap_docs_seed_scaffold'). Absent when output_preference='roadmap_docs' (markdown-only).",
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "scaffold": {
+      "description": "Optional. V2.1 scaffold/MVP code reference. Present only when builds.output_preference='roadmap_docs_seed_scaffold' AND the Jury audit gate passed on the scaffold. Carries the path inside the seeded repo and a sha256 of the scaffold tree at delivery for tamper-evidence.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "tree_sha256"],
+      "properties": {
+        "path": {
+          "description": "Path inside the seeded repo where the scaffold lives (e.g. 'apps/web').",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "tree_sha256": {
+          "description": "Lowercase hex sha256 of the canonicalized scaffold tree at delivery. Tamper witness; mismatches escalate to Crash + Shield.",
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "roadmapMilestone": {
+      "title": "Roadmap milestone",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "scope", "exit_gate"],
+      "properties": {
+        "id": {
+          "description": "Short milestone id (e.g. M0, M1, V2). Stable across re-emissions of the bundle.",
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9-]{0,15}$"
+        },
+        "name": {
+          "description": "Human-readable milestone name.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "scope": {
+          "description": "One-line scope statement.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 480
+        },
+        "exit_gate": {
+          "description": "Binary, automation-checkable exit gate (mirrors sprint/milestone-MX.md format).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "estimated_weeks": {
+          "description": "Optional. Estimated calendar weeks to complete.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 104
+        },
+        "deliverables": {
+          "description": "Optional. Per-layer deliverable list (one entry per assigned layer-lead).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["owner", "deliverable"],
+            "properties": {
+              "owner": { "type": "string", "minLength": 1, "maxLength": 80 },
+              "deliverable": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 480
+              }
+            }
+          }
+        }
+      }
+    },
+    "architectureDoc": {
+      "title": "Architecture document",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body_markdown", "components"],
+      "properties": {
+        "body_markdown": {
+          "description": "Markdown body — system diagram (mermaid ok), component overview, data model summary.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        "components": {
+          "description": "Structured component inventory for tooling.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "kind"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "service",
+                  "library",
+                  "datastore",
+                  "queue",
+                  "external_api",
+                  "frontend",
+                  "worker",
+                  "cdn",
+                  "other"
+                ]
+              },
+              "tech": { "type": "string", "maxLength": 240 },
+              "purpose": { "type": "string", "maxLength": 480 }
+            }
+          }
+        }
+      }
+    },
+    "prdDoc": {
+      "title": "PRD document",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body_markdown", "goals", "non_goals", "success_criteria"],
+      "properties": {
+        "body_markdown": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        "goals": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "type": "string", "minLength": 1, "maxLength": 480 }
+        },
+        "non_goals": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "type": "string", "minLength": 1, "maxLength": 480 }
+        },
+        "success_criteria": {
+          "description": "Echoed from the confirmed brief (BigBrain may refine; the Jury audit gate compares against this set).",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "type": "string", "minLength": 1, "maxLength": 480 }
+        }
+      }
+    },
+    "brandDoc": {
+      "title": "Brand tokens",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body_markdown", "tokens"],
+      "properties": {
+        "body_markdown": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80000
+        },
+        "tokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["colors", "typography"],
+          "properties": {
+            "colors": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{3,8}$"
+              },
+              "minProperties": 1
+            },
+            "typography": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["families"],
+              "properties": {
+                "families": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  "minProperties": 1
+                },
+                "scale": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1, "maxLength": 40 }
+                }
+              }
+            },
+            "spacing": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1, "maxLength": 40 }
+            }
+          }
+        }
+      }
+    },
+    "voiceDoc": {
+      "title": "Voice document",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body_markdown", "tone", "reading_level_max"],
+      "properties": {
+        "body_markdown": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80000
+        },
+        "tone": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 40 }
+        },
+        "reading_level_max": {
+          "description": "Highest grade level any user-facing copy should hit (Herald default = 9).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "do_list": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+        },
+        "dont_list": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+        }
+      }
+    },
+    "decision": {
+      "title": "Locked decision",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "question", "answer", "rationale"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z]+-D[0-9]+$"
+        },
+        "question": { "type": "string", "minLength": 1, "maxLength": 480 },
+        "answer": { "type": "string", "minLength": 1, "maxLength": 480 },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "cross_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+        }
+      }
+    },
+    "risk": {
+      "title": "Risk register row",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["risk", "likelihood", "impact", "mitigation"],
+      "properties": {
+        "risk": { "type": "string", "minLength": 1, "maxLength": 480 },
+        "likelihood": {
+          "type": "string",
+          "enum": ["Low", "Medium", "High"]
+        },
+        "impact": {
+          "type": "string",
+          "enum": ["Low", "Medium", "High", "Critical"]
+        },
+        "mitigation": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "owner": { "type": "string", "maxLength": 120 },
+        "deadline": { "type": "string", "format": "date" }
+      }
+    },
+    "cogsDoc": {
+      "title": "COGS document",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body_markdown"],
+      "properties": {
+        "body_markdown": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80000
+        },
+        "estimated_unit_cost_micros": {
+          "description": "Optional. Penny's projected per-unit cost in micros ($/1e6) at the modeled scale. Absent when Penny declines to estimate (honest gap).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "recommended_price_micros": {
+          "description": "Optional. Recommended customer-facing price in micros. Absent for internal-tooling risk_profile.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "scale_assumption": {
+          "type": "string",
+          "maxLength": 480
+        }
+      }
+    },
+    "channelsDoc": {
+      "title": "Channels document",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["body_markdown", "channels"],
+      "properties": {
+        "body_markdown": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80000
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "rationale"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 480
+              },
+              "instrument": { "type": "string", "maxLength": 240 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

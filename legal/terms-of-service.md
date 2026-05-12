@@ -1,11 +1,11 @@
 # Studio Zero — Terms of Service
 
-**Version:** 1.1 (M2 — cross-refs to refund-matrix.md M2 implementation; D22 reset clause locked; DPA template URL bound)
+**Version:** 1.2 (V2 — Build mode extension incorporated by reference; AI System Card pointer bumped v0.5 → v1.5 chain)
 **Effective date:** 2026-05-12
 **Last updated:** 2026-05-12
 **Owner:** Comply (Compliance Officer)
-**PRD anchors:** §17 Decision #19 (BYOK pass-through — LOCKED), §17 Decision #20 (regional refund matrix — LOCKED v0.4), §17 Decision #22 (EU cooling-off resets per upgrade — LOCKED v0.5), §14.5 (compliance), §14.7 (AUP), §11.3 (AI disclosure), §12 (pricing & tiers), §14.4 (privacy & retention)
-**Cross-references:** `legal/privacy-policy.md`, `legal/aup.md`, `legal/subprocessors.md`, `legal/data-processing-agreement.md` (Art. 28 DPA — LIVE at M2), `legal/ai-system-card-v0.5.md`, `finance/refund-matrix.md`, `compliance/click-to-cancel-ux-audit.md`, `compliance/d22-cooling-off-flow.md`
+**PRD anchors:** §17 Decision #19 (BYOK pass-through — LOCKED), §17 Decision #20 (regional refund matrix — LOCKED v0.4), §17 Decision #22 (EU cooling-off resets per upgrade — LOCKED v0.5), §14.5 (compliance), §14.7 (AUP), §11.3 (AI disclosure), §12 (pricing & tiers), §14.4 (privacy & retention), §4 V2 Goals (Build mode), §7.3 Build Workflow
+**Cross-references:** `legal/privacy-policy.md`, `legal/aup.md`, `legal/subprocessors.md`, `legal/data-processing-agreement.md` (Art. 28 DPA — LIVE at M2), `legal/ai-system-card-v1.5.md` (current — V2; predecessors: `legal/ai-system-card-v1.0.md`, `legal/ai-system-card-v0.5.md`), **`legal/build-mode-extension.md` (V2 Build mode ToS extension — incorporated by reference for Managed Pro customers activating Build mode)**, `finance/refund-matrix.md`, `compliance/click-to-cancel-ux-audit.md`, `compliance/d22-cooling-off-flow.md`
 **Voice:** plain English, grade-9 ceiling, sentence case per `brand/voice.md`. We say what we mean. Legal terms are explained in line, not buried in a glossary.
 
 > **Plain-English mandate.** This file follows the principle in `agents/operations/comply.md` §4: a Terms of Service that no consumer can read is not a Terms of Service, it is a liability shield made of fog. Every defined term is introduced in plain words; the legal-of-record language follows in parentheses where required for enforceability.
@@ -53,6 +53,10 @@ A Studio Zero finding is a recommendation, not an order. We do not deploy code o
 ### 2.4 The Surface, Code, and Full SKUs
 
 Audit products are defined in `PRD.md` §9.1. **Surface** is an external accessibility + UX audit on a URL you attest you own. **Code** adds repository review of front-end source. **Full** is the deepest tier and inspects backend + infra-as-code.
+
+### 2.5 Build mode (V2+, Managed Pro only)
+
+Build mode is the V2 feature that takes a product description from you, generates a structured brief, dispatches Studio Zero's multi-layer agent system, runs the Jury audit gate against the generated artifact, and delivers a roadmap + documentation bundle (optionally seeded into a GitHub repo, and at V2.1, optionally with a working scaffold). **Build mode is governed by `legal/build-mode-extension.md`, which is incorporated by reference into these Terms.** The extension is the load-bearing source of truth for: customer ownership of the delivered bundle and seeded repository (Studio Zero retains rubric IP only); customer warranty about the idea description (no third-party IP injection); similarity-to-public-references disclaimer; the audit-gate-is-opinion-not-legal-certification disclaimer; pricing (Managed Pro includes 1 build/mo; overage $499/build, with Penny refinement after the first V2 cohort); and Build mode-specific retention. Where this base ToS and the Build mode extension disagree on a Build-mode-specific question, the extension controls.
 
 ---
 
@@ -408,4 +412,4 @@ Neither party is liable for delay or failure to perform caused by events beyond 
 
 ---
 
-_Comply locks this Terms of Service at v1.1 on 2026-05-12 (M2 — Click-to-Cancel UX cross-ref + D22 reset clause locked + DPA template URL bound). Re-verify quarterly. Any regulatory change (EU AI Act Art. 50 binding 2026-08-02; FTC NPRM pending; CPRA regulation updates; Stripe Services Agreement amendments) triggers a version bump._
+_Comply locks this Terms of Service at v1.2 on 2026-05-12 (V2 Batch 1 — Build mode extension incorporated by reference; AI System Card pointer bumped to v1.5). Re-verify quarterly. Any regulatory change (EU AI Act Art. 50 binding 2026-08-02; FTC NPRM pending; CPRA regulation updates; Stripe Services Agreement amendments) triggers a version bump. The Build mode extension at `legal/build-mode-extension.md` has its own version lifecycle on the same Comply cadence._

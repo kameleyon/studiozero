@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://studio-zero.app/schemas/brief.v1.json",
+  "title": "Studio Zero — Build-mode brief.v1",
+  "description": "Structured brief produced by BigBrain from a customer's intake form, confirmed by the customer before layer dispatch. Per PRD §7.3 step 2 + BIGBRAIN.md Hard Rule #1.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "build_id",
+    "tenant_id",
+    "project_name",
+    "target_audience",
+    "jtbd",
+    "success_criteria",
+    "constraints",
+    "risk_profile",
+    "team_roster",
+    "output_preference",
+    "generated_at",
+    "produced_by"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "brief.v1" },
+    "build_id": { "type": "string", "format": "uuid" },
+    "tenant_id": { "type": "string", "format": "uuid" },
+    "project_name": { "type": "string", "minLength": 3, "maxLength": 120 },
+    "idea_summary": { "type": "string", "minLength": 10, "maxLength": 2000 },
+    "target_audience": {
+      "type": "object",
+      "required": ["persona", "primary_need", "pain_point"],
+      "additionalProperties": false,
+      "properties": {
+        "persona": { "type": "string", "minLength": 3, "maxLength": 240 },
+        "primary_need": { "type": "string", "minLength": 3, "maxLength": 240 },
+        "pain_point": { "type": "string", "minLength": 3, "maxLength": 240 }
+      }
+    },
+    "jtbd": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 480,
+      "description": "Jobs-to-be-done statement — 'When [situation], I want [motivation], so I can [outcome]'."
+    },
+    "success_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": { "type": "string", "minLength": 3, "maxLength": 240 }
+    },
+    "vibe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "adjectives": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "maxLength": 40 }
+        },
+        "reference_urls": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "budget_usd": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 10000000
+        },
+        "deadline": { "type": ["string", "null"], "format": "date" },
+        "must_have_features": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string", "maxLength": 240 }
+        },
+        "non_goals": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "type": "string", "maxLength": 240 }
+        }
+      }
+    },
+    "risk_profile": {
+      "type": "string",
+      "enum": ["regulated", "consumer", "internal"],
+      "description": "Per BIGBRAIN.md Brief Translation — drives Shield + Comply attention."
+    },
+    "team_roster": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "saas",
+          "ecommerce",
+          "mobile",
+          "blog",
+          "marketing-site",
+          "gaming",
+          "vr",
+          "native-ios",
+          "audit"
+        ]
+      }
+    },
+    "output_preference": {
+      "type": "string",
+      "enum": [
+        "roadmap-docs",
+        "roadmap-docs-repo",
+        "roadmap-docs-repo-scaffold"
+      ],
+      "description": "V2 ships roadmap-docs + roadmap-docs-repo. roadmap-docs-repo-scaffold is V2.1, audit-gated."
+    },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "produced_by": {
+      "type": "object",
+      "required": ["agent", "model_class"],
+      "additionalProperties": false,
+      "properties": {
+        "agent": { "const": "bigbrain" },
+        "model_class": {
+          "type": "string",
+          "enum": ["fast", "thoughtful", "long-context"]
+        },
+        "request_id": { "type": "string" }
+      }
+    }
+  }
+}
